@@ -45,7 +45,10 @@
     if (!value) return '';
     try { const u = new URL(value, document.baseURI); return ['http:', 'https:'].includes(u.protocol) ? value : ''; } catch { return ''; }
   }
-  function normalizeIconUrl(value) { return value.replace(/\.svg$/i, '.png'); }
+  function normalizeIconUrl(value) {
+    if (/^(?:\.\/)?icons\/default-team\.svg$/i.test(value)) return value.replace(/default-team\.svg$/i, 'lamp.png');
+    return value.replace(/\.svg$/i, '.png');
+  }
   function matchingBuiltInIcon(value) {
     if (!value) return '';
     try {
