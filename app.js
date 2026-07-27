@@ -140,12 +140,12 @@
     announce(finalTeams.length?`Score reveal complete. ${finalTeams[0].name} is in first place.`:'Score reveal complete.');
   }
   function cancelReveal() {
-    if(!revealState.active)return; cancelAnimationFrame(revealState.frame); revealState.active=false; clearAllHighlights();
+    clearAllHighlights(); if(!revealState.active)return; cancelAnimationFrame(revealState.frame); revealState.active=false;
     $('revealProgress').style.removeProperty('will-change'); $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true; renderLeaderboard();
   }
   function revealFrame(now) {
     if(!revealState.active)return; const elapsed=now-revealState.startedAt, progress=Math.min(1,elapsed/revealState.duration); $('revealProgress').style.setProperty('--progress',String(progress));
-    const newlySettled=[]; data.teams.forEach((team,index)=>{const target=revealState.targetScores.get(team.id),score=Math.min(target,target*revealCurve(index,progress));revealState.displayedScores.set(team.id,score);updateTeamVisuals(team.id,score,Math.max(1,scorePrecision(target)));if(score===target&&!revealState.settledTeams.has(team.id)){revealState.settledTeams.add(team.id);newlySettled.push(team.id)}});
+    const newlySettled=[]; data.teams.forEach((team,index)=>{const target=revealState.targetScores.get(team.id),score=Math.min(target,target*revealCurve(index,progress));revealState.displayedScores.set(team.id,score);updateTeamVisuals(team.id,score,Math.max(1,scorePrecision(target)));if(target>0&&score===target&&!revealState.settledTeams.has(team.id)){revealState.settledTeams.add(team.id);newlySettled.push(team.id)}});
     let rankHighlighted=false;if(now-revealState.lastRankAt>=200){revealState.lastRankAt=now;rankHighlighted=reorderRevealRows(sortedTeams(item=>revealState.displayedScores.get(item.id)),now)}
     if(!rankHighlighted&&newlySettled.length)highlightTeam(newlySettled[0],'score-settled',now);
     if(progress===1)finishReveal();else revealState.frame=requestAnimationFrame(revealFrame);
