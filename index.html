@@ -33,7 +33,8 @@
         <div class="updated">Live standings · Updated <time id="updatedAt">—</time></div>
       </div>
       <div class="leaderboard-card">
-        <div class="leaderboard-heading"><h2>Leaderboard</h2><span id="teamCount"></span></div>
+        <div class="leaderboard-heading"><h2>Leaderboard</h2><div class="leaderboard-actions"><span id="teamCount"></span><button id="revealButton" class="reveal-button" type="button" aria-label="Reveal the current team scores">Reveal</button></div></div>
+        <div id="revealStatus" class="reveal-status" role="status" aria-live="polite" hidden><span>Revealing scores...</span><div class="reveal-track" aria-hidden="true"><span id="revealProgress"></span></div></div>
         <ol id="leaderboard" class="leaderboard"></ol>
         <div id="emptyState" class="empty-state" hidden><strong>No teams yet</strong><p>Check back soon for the first competitors.</p></div>
       </div>

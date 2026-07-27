@@ -15,6 +15,11 @@
   const $ = id => document.getElementById(id);
   let data = { maximumScore: 100, updatedAt: new Date().toISOString(), teams: [] };
   let deferredInstall = null, pendingWorker = null, toastTimer;
+  const revealState = {
+    active: false, startedAt: 0, duration: 10000, displayedScores: new Map(),
+    targetScores: new Map(), rows: new Map(), frame: 0, lastTurnAt: 0,
+    nextTeamIndex: 0, reducedMotion: false
+  };
 
   function validateDocument(value) {
     const errors = [];
@@ -60,20 +65,64 @@
   function hashHue(id) { let h=0; for (const c of id) h=(h*31+c.charCodeAt(0))%360; return (h%70)+255; }
   function formatNumber(n) { return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2))); }
   function formatDate(iso) { const d=new Date(iso); return d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }
-  function sortedTeams() { return [...data.teams].sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name,undefined,{sensitivity:'base'})); }
+  function compareTeams(a,b,scoreFor=team=>team.score) { return scoreFor(b)-scoreFor(a) || a.name.localeCompare(b.name,undefined,{sensitivity:'base'}); }
+  function sortedTeams(scoreFor) { return [...data.teams].sort((a,b)=>compareTeams(a,b,scoreFor)); }
+  function scorePrecision(score) { const text=String(score).toLowerCase(); return text.includes('e-')?Number(text.split('e-')[1]):(text.split('.')[1]||'').length; }
+
+  function createLeaderboardRow(team,index,displayedScore=team.score) {
+    const li=document.createElement('li'); li.className='team-row'; li.dataset.teamId=team.id;
+    const rank=document.createElement('span'); rank.className='rank';
+    const img=document.createElement('img'); img.className='team-icon'; img.alt=''; img.loading='lazy'; img.referrerPolicy='no-referrer'; img.src=safeIconUrl(team.iconUrl)||FALLBACK_ICON; img.addEventListener('error',()=>{if(!img.src.endsWith(FALLBACK_ICON))img.src=FALLBACK_ICON;},{once:true});
+    const main=document.createElement('div'); main.className='team-main'; const name=document.createElement('div'); name.className='team-name'; name.textContent=team.name; name.title=team.name;
+    const progress=document.createElement('div'); progress.className='progress'; progress.setAttribute('role','progressbar'); progress.setAttribute('aria-valuemin','0'); progress.setAttribute('aria-valuemax',String(data.maximumScore)); progress.style.setProperty('--hue',hashHue(team.id));
+    const fill=document.createElement('div'); fill.className='progress-fill'; const score=document.createElement('span'); score.className='score-label'; progress.append(fill,score); main.append(name,progress); li.append(rank,img,main);
+    updateLeaderboardRow(li,team,displayedScore,index,false); return li;
+  }
+  function updateLeaderboardRow(row,team,score,index,animateFill=true) {
+    const rank=row.querySelector('.rank'), progress=row.querySelector('.progress'), fill=row.querySelector('.progress-fill'), label=row.querySelector('.score-label');
+    rank.className='rank'+(index<3?' medal':''); rank.textContent=['🥇','🥈','🥉'][index] || String(index+1); rank.setAttribute('aria-label',`Rank ${index+1}`);
+    const pct=data.maximumScore ? score/data.maximumScore*100 : 0, clamped=Math.min(100,Math.max(0,pct));
+    label.textContent=`${formatNumber(score)} / ${formatNumber(data.maximumScore)}`; progress.setAttribute('aria-label',`${team.name}: ${formatNumber(score)} of ${formatNumber(data.maximumScore)} points, ${Math.round(pct)} percent`); progress.setAttribute('aria-valuenow',String(Math.min(score,data.maximumScore)));
+    if(!animateFill)fill.style.transition='none'; fill.style.width=`${clamped}%`; if(!animateFill)requestAnimationFrame(()=>fill.style.removeProperty('transition'));
+  }
 
   function renderLeaderboard() {
     const list=$('leaderboard'); list.replaceChildren(); const teams=sortedTeams();
-    teams.forEach((team,index) => {
-      const li=document.createElement('li'); li.className='team-row';
-      const rank=document.createElement('span'); rank.className='rank'+(index<3?' medal':''); rank.textContent=['🥇','🥈','🥉'][index] || String(index+1); rank.setAttribute('aria-label',`Rank ${index+1}`);
-      const img=document.createElement('img'); img.className='team-icon'; img.alt=''; img.loading='lazy'; img.referrerPolicy='no-referrer'; img.src=safeIconUrl(team.iconUrl)||FALLBACK_ICON; img.addEventListener('error',()=>{if(!img.src.endsWith(FALLBACK_ICON))img.src=FALLBACK_ICON;},{once:true});
-      const main=document.createElement('div'); main.className='team-main'; const name=document.createElement('div'); name.className='team-name'; name.textContent=team.name; name.title=team.name;
-      const pct=data.maximumScore ? team.score/data.maximumScore*100 : 0; const clamped=Math.min(100,Math.max(0,pct));
-      const progress=document.createElement('div'); progress.className='progress'; progress.setAttribute('role','progressbar'); progress.setAttribute('aria-label',`${team.name}: ${formatNumber(team.score)} of ${formatNumber(data.maximumScore)} points, ${Math.round(pct)} percent`); progress.setAttribute('aria-valuemin','0'); progress.setAttribute('aria-valuemax',String(data.maximumScore)); progress.setAttribute('aria-valuenow',String(Math.min(team.score,data.maximumScore))); progress.style.setProperty('--hue',hashHue(team.id));
-      const fill=document.createElement('div'); fill.className='progress-fill'; const score=document.createElement('span'); score.className='score-label'; score.textContent=`${formatNumber(team.score)} / ${formatNumber(data.maximumScore)}`; progress.append(fill,score); main.append(name,progress); li.append(rank,img,main); list.append(li); requestAnimationFrame(()=>fill.style.width=`${clamped}%`);
-    });
+    teams.forEach((team,index)=>list.append(createLeaderboardRow(team,index)));
     $('emptyState').hidden=teams.length>0; $('teamCount').textContent=`${teams.length} ${teams.length===1?'team':'teams'}`; $('updatedAt').dateTime=data.updatedAt; $('updatedAt').textContent=formatDate(data.updatedAt);
+  }
+
+  function reorderRevealRows(teams) {
+    const list=$('leaderboard'), oldPositions=new Map();
+    if(!revealState.reducedMotion)teams.forEach(team=>oldPositions.set(team.id,revealState.rows.get(team.id).getBoundingClientRect().top));
+    teams.forEach((team,index)=>{const row=revealState.rows.get(team.id);list.append(row);updateLeaderboardRow(row,team,revealState.displayedScores.get(team.id),index)});
+    if(!revealState.reducedMotion)teams.forEach(team=>{const row=revealState.rows.get(team.id),delta=oldPositions.get(team.id)-row.getBoundingClientRect().top;if(delta)row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:360,easing:'cubic-bezier(.2,.8,.2,1)'})});
+  }
+  function finishReveal() {
+    if(!revealState.active)return; cancelAnimationFrame(revealState.frame);
+    data.teams.forEach(team=>revealState.displayedScores.set(team.id,revealState.targetScores.get(team.id)));
+    const finalTeams=sortedTeams(team=>revealState.displayedScores.get(team.id)); reorderRevealRows(finalTeams); revealState.rows.forEach(row=>row.classList.remove('is-advancing'));
+    if(finalTeams[0]){const winner=revealState.rows.get(finalTeams[0].id);winner.classList.add('is-winner');setTimeout(()=>winner?.classList.remove('is-winner'),1600)}
+    revealState.active=false; $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true;
+    announce(finalTeams.length?`Score reveal complete. ${finalTeams[0].name} is in first place.`:'Score reveal complete.');
+  }
+  function cancelReveal() {
+    if(!revealState.active)return; cancelAnimationFrame(revealState.frame); revealState.active=false; revealState.rows.clear();
+    $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true; renderLeaderboard();
+  }
+  function revealFrame(now) {
+    if(!revealState.active)return; const elapsed=now-revealState.startedAt, progress=Math.min(1,elapsed/revealState.duration); $('revealProgress').style.width=`${progress*100}%`;
+    const turnDelay=progress>.8?(revealState.reducedMotion?80:180):(revealState.reducedMotion?35:80);
+    if(now-revealState.lastTurnAt>=turnDelay || progress===1) {
+      revealState.lastTurnAt=now; const teams=data.teams, team=teams[revealState.nextTeamIndex++%Math.max(1,teams.length)]; revealState.rows.forEach(row=>row.classList.remove('is-advancing'));
+      if(team){const target=revealState.targetScores.get(team.id),factor=10**scorePrecision(target),eased=1-Math.pow(1-progress,progress>.8?2.4:1.25);let next=Math.round(target*eased*factor)/factor;next=Math.max(revealState.displayedScores.get(team.id),Math.min(target,next));revealState.displayedScores.set(team.id,next);revealState.rows.get(team.id).classList.add('is-advancing');reorderRevealRows(sortedTeams(item=>revealState.displayedScores.get(item.id)))}
+    }
+    if(progress===1)finishReveal();else revealState.frame=requestAnimationFrame(revealFrame);
+  }
+  function startReveal() {
+    if(revealState.active||!data.teams.length)return; revealState.active=true;revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;revealState.duration=revealState.reducedMotion?1000:10000;revealState.startedAt=performance.now();revealState.lastTurnAt=-Infinity;revealState.nextTeamIndex=0;revealState.displayedScores.clear();revealState.targetScores.clear();revealState.rows.clear();
+    data.teams.forEach(team=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score)});const initial=sortedTeams(team=>revealState.displayedScores.get(team.id)),list=$('leaderboard');list.replaceChildren();initial.forEach((team,index)=>{const row=createLeaderboardRow(team,index,0);revealState.rows.set(team.id,row);list.append(row)});
+    $('revealButton').disabled=true;$('revealButton').textContent='Revealing...';$('revealStatus').hidden=false;$('revealProgress').style.width='0%';announce('Score reveal started.');revealState.frame=requestAnimationFrame(revealFrame);
   }
   function renderAdmin() {
     $('maximumScore').value=data.maximumScore; const editor=$('teamEditor'); editor.replaceChildren();
@@ -138,14 +187,14 @@
   function authorized(){return sessionStorage.getItem(SESSION_KEY)==='yes'}
   // Client-side authentication only deters casual access; source inspection can reveal or bypass it.
   function passwordMatches(value){return value === ['T','a','u','b','o','y','s'].join('')}
-  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(authorized()){$('adminScreen').hidden=false;renderAdmin()}else{$('loginScreen').hidden=false;setTimeout(()=>$('password').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
+  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; if(name!=='leaderboard')cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(authorized()){$('adminScreen').hidden=false;renderAdmin()}else{$('loginScreen').hidden=false;setTimeout(()=>$('password').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
   function openMenu(){ $('drawer').classList.add('open');$('drawer').setAttribute('aria-hidden','false');$('menuButton').setAttribute('aria-expanded','true');$('scrim').hidden=false;$('closeMenu').focus() }
   function closeMenu(){ $('drawer').classList.remove('open');$('drawer').setAttribute('aria-hidden','true');$('menuButton').setAttribute('aria-expanded','false');$('scrim').hidden=true }
   function confirmAction(title,message){return new Promise(resolve=>{const dialog=$('confirmDialog');$('dialogTitle').textContent=title;$('dialogMessage').textContent=message;dialog.showModal();dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true})})}
   function downloadJson(){const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='teams.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);announce('JSON exported.')}
 
   function bindEvents(){
-    addEventListener('hashchange',route);$('menuButton').onclick=openMenu;$('closeMenu').onclick=closeMenu;$('scrim').onclick=closeMenu;addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('refreshButton').onclick=()=>location.reload();
+    addEventListener('hashchange',route);$('menuButton').onclick=openMenu;$('closeMenu').onclick=closeMenu;$('scrim').onclick=closeMenu;addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('refreshButton').onclick=()=>location.reload();$('revealButton').onclick=startReveal;
     $('togglePassword').onclick=()=>{const p=$('password'),show=p.type==='password';p.type=show?'text':'password';$('togglePassword').textContent=show?'Hide':'Show';$('togglePassword').setAttribute('aria-label',show?'Hide password':'Show password')};
     $('loginForm').onsubmit=e=>{e.preventDefault();if(passwordMatches($('password').value)){sessionStorage.setItem(SESSION_KEY,'yes');$('password').value='';$('loginError').textContent='';route();announce('Signed in.')}else{$('loginError').textContent='Incorrect password. Please try again.';$('password').select()}};
     $('logoutButton').onclick=()=>{sessionStorage.removeItem(SESSION_KEY);location.hash='leaderboard';announce('Logged out.')};
