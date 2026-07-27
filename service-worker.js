@@ -1,5 +1,5 @@
-const CACHE_NAME = 'tep-hunt-v2';
-const SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './data/teams.json', './icons/default-team.svg', './icons/app-icon.svg'];
+const CACHE_NAME = 'tep-hunt-v3';
+const SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './data/teams.json', './icons/default-team.svg', './icons/app-icon.svg', './icons/lamp.svg', './icons/open-book.svg', './icons/scroll.svg', './icons/star.svg', './icons/sword.svg', './icons/sword.png', './icons/three-plumes.svg'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL))));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim())));
 self.addEventListener('message', event => { if (event.data === 'SKIP_WAITING') self.skipWaiting(); });

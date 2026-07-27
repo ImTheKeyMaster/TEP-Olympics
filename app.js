@@ -3,6 +3,15 @@
   const STORAGE_KEY = 'tep-hunt-data-v1';
   const SESSION_KEY = 'tep-hunt-admin';
   const FALLBACK_ICON = 'icons/default-team.svg';
+  const AVAILABLE_TEAM_ICONS = [
+    { path: 'icons/lamp.svg', label: 'Lamp' },
+    { path: 'icons/open-book.svg', label: 'Open Book' },
+    { path: 'icons/scroll.svg', label: 'Scroll' },
+    { path: 'icons/star.svg', label: 'Star' },
+    { path: 'icons/sword.svg', label: 'Sword' },
+    { path: 'icons/sword.png', label: 'Sword (PNG)' },
+    { path: 'icons/three-plumes.svg', label: 'Three Plumes' }
+  ];
   const $ = id => document.getElementById(id);
   let data = { maximumScore: 100, updatedAt: new Date().toISOString(), teams: [] };
   let deferredInstall = null, pendingWorker = null, toastTimer;
@@ -36,6 +45,13 @@
     if (!value) return '';
     try { const u = new URL(value, document.baseURI); return ['http:', 'https:'].includes(u.protocol) ? value : ''; } catch { return ''; }
   }
+  function matchingBuiltInIcon(value) {
+    if (!value) return '';
+    try {
+      const requested = new URL(value, document.baseURI).href;
+      return AVAILABLE_TEAM_ICONS.find(icon => new URL(icon.path, document.baseURI).href === requested)?.path || '';
+    } catch { return ''; }
+  }
   function announce(message, error = false) { const toast=$('toast'); toast.textContent=message; toast.style.background=error?'#751b29':'#172a22'; toast.hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>toast.hidden=true,3500); }
   function hashHue(id) { let h=0; for (const c of id) h=(h*31+c.charCodeAt(0))%360; return (h%70)+255; }
   function formatNumber(n) { return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2))); }
@@ -64,15 +80,34 @@
     const card=document.createElement('form'); card.className='team-edit-card'; card.noValidate=true; card.dataset.id=team.id;
     const grid=document.createElement('div'); grid.className='team-edit-grid';
     const field=(label,type,value,kind) => { const wrap=document.createElement('div'), lab=document.createElement('label'), input=document.createElement('input'), err=document.createElement('p'); lab.textContent=label; input.type=type; input.value=value; input.dataset.field=kind; input.id=`${kind}-${team.id}`; lab.htmlFor=input.id; err.className='field-error'; err.dataset.error=kind; wrap.append(lab,input,err); return {wrap,input}; };
-    const name=field('Team name','text',team.name,'name'), icon=field('Icon URL','url',team.iconUrl,'iconUrl'), score=field('Current score','number',team.score,'score'); score.input.min='0'; score.input.step='any';
+    const name=field('Team name','text',team.name,'name'), score=field('Current score','number',team.score,'score'); score.input.min='0'; score.input.step='any';
+    const iconField=document.createElement('fieldset'); iconField.className='team-icon-field';
+    const iconLegend=document.createElement('legend'); iconLegend.textContent='Team Icon';
+    const iconHelp=document.createElement('p'); iconHelp.className='field-help'; iconHelp.textContent='Choose a built-in icon, or use a custom URL below.';
+    const iconGrid=document.createElement('div'); iconGrid.className='team-icon-grid';
+    const selectedBuiltIn=matchingBuiltInIcon(team.iconUrl);
+    AVAILABLE_TEAM_ICONS.forEach(icon => {
+      const option=document.createElement('label'); option.className='team-icon-option';
+      const radio=document.createElement('input'); radio.type='radio'; radio.name=`icon-${team.id}`; radio.value=icon.path; radio.dataset.field='builtInIcon'; radio.checked=icon.path===selectedBuiltIn;
+      const preview=document.createElement('img'); preview.src=icon.path; preview.alt=`${icon.label} icon`; preview.loading='lazy'; preview.addEventListener('error',()=>{preview.src=FALLBACK_ICON},{once:true});
+      const label=document.createElement('span'); label.textContent=icon.label;
+      const check=document.createElement('span'); check.className='icon-check'; check.textContent='✓'; check.setAttribute('aria-hidden','true');
+      option.append(radio,preview,label,check); iconGrid.append(option);
+    });
+    const custom=document.createElement('details'); custom.className='custom-icon'; custom.open=Boolean(team.iconUrl && !selectedBuiltIn);
+    const customSummary=document.createElement('summary'); customSummary.textContent='Custom Icon URL';
+    const customField=field('Custom icon URL','url',selectedBuiltIn?'':team.iconUrl,'iconUrl'); customField.input.placeholder='https://example.com/icon.png';
+    custom.append(customSummary,customField.wrap); iconField.append(iconLegend,iconHelp,iconGrid,custom);
+    iconGrid.addEventListener('change',event=>{if(event.target.matches('[data-field=builtInIcon]'))customField.input.value=''});
+    customField.input.addEventListener('input',()=>{if(customField.input.value)iconGrid.querySelectorAll('input[type=radio]').forEach(radio=>radio.checked=false)});
     const scoreRow=document.createElement('div'); scoreRow.className='score-input'; const minus=document.createElement('button'); minus.type='button'; minus.textContent='−1'; minus.setAttribute('aria-label',`Subtract one point from ${team.name}`); const plus=document.createElement('button'); plus.type='button'; plus.textContent='+1'; plus.setAttribute('aria-label',`Add one point to ${team.name}`); score.input.parentNode?.removeChild(score.input); scoreRow.append(minus,score.input,plus); score.wrap.insertBefore(scoreRow,score.wrap.querySelector('.field-error'));
     minus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?Math.max(0,n-1):0}; plus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?n+1:1};
-    grid.append(name.wrap,icon.wrap,score.wrap); const actions=document.createElement('div'); actions.className='team-actions';
-    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);renderAdmin()}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(grid,actions); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
+    grid.append(name.wrap,score.wrap); const actions=document.createElement('div'); actions.className='team-actions';
+    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);renderAdmin()}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(grid,iconField,actions); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
   }
   function saveTeam(event,id) {
     event.preventDefault(); const form=event.currentTarget, button=form.querySelector('[type=submit]'); if(button.disabled)return; button.disabled=true;
-    form.querySelectorAll('.field-error').forEach(e=>e.textContent=''); const name=form.querySelector('[data-field=name]').value.trim(), iconUrl=form.querySelector('[data-field=iconUrl]').value.trim(), raw=form.querySelector('[data-field=score]').value, score=Number(raw); let valid=true;
+    form.querySelectorAll('.field-error').forEach(e=>e.textContent=''); const name=form.querySelector('[data-field=name]').value.trim(), selectedIcon=form.querySelector('[data-field=builtInIcon]:checked'), customIcon=form.querySelector('[data-field=iconUrl]').value.trim(), iconUrl=selectedIcon?.value || customIcon, raw=form.querySelector('[data-field=score]').value, score=Number(raw); let valid=true;
     const error=(field,msg)=>{form.querySelector(`[data-error=${field}]`).textContent=msg;valid=false}; if(!name)error('name','A team name is required.'); if(data.teams.some(t=>t.id!==id&&t.name.toLowerCase()===name.toLowerCase()))error('name','Team names must be unique.'); if(raw.trim()===''||!Number.isFinite(score)||score<0)error('score','Enter a score of zero or greater.'); if(iconUrl&&!safeIconUrl(iconUrl))error('iconUrl','Use an http(s) URL or safe relative path.');
     if(!valid){announce('Please correct the highlighted fields.',true);button.disabled=false;return} const team=data.teams.find(t=>t.id===id); Object.assign(team,{name,iconUrl,score}); delete team._isNew; persist('Team saved.'); button.disabled=false;
   }
@@ -111,7 +146,7 @@
     $('loginForm').onsubmit=e=>{e.preventDefault();if(passwordMatches($('password').value)){sessionStorage.setItem(SESSION_KEY,'yes');$('password').value='';$('loginError').textContent='';route();announce('Signed in.')}else{$('loginError').textContent='Incorrect password. Please try again.';$('password').select()}};
     $('logoutButton').onclick=()=>{sessionStorage.removeItem(SESSION_KEY);location.hash='leaderboard';announce('Logged out.')};
     $('maximumForm').onsubmit=e=>{e.preventDefault();const raw=$('maximumScore').value,n=Number(raw);$('maximumError').textContent='';if(raw.trim()===''||!Number.isFinite(n)||n<=0){$('maximumError').textContent='Enter a number greater than zero.';announce('Maximum score is invalid.',true);return}data.maximumScore=n;persist('Maximum score updated.')};
-    $('addTeam').onclick=()=>{const id=newId();data.teams.push({id,name:'New Team',iconUrl:FALLBACK_ICON,score:0,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
+    $('addTeam').onclick=()=>{const id=newId();data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
     $('exportJson').onclick=downloadJson;$('copyJson').onclick=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(data,null,2)+'\n');announce('JSON copied to clipboard.')}catch{announce('Clipboard access was unavailable.',true)}};
     $('importJson').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const result=validateDocument(JSON.parse(await file.text()));if(!result.valid)throw new Error(result.errors.join(' '));if(await confirmAction('Import JSON?',`Replace local data with ${result.data.teams.length} teams and a maximum score of ${formatNumber(result.data.maximumScore)}?`)){data=result.data;persist('JSON imported.')}}catch(error){announce(`Import rejected: ${error.message}`,true)}};
     $('resetData').onclick=async()=>{if(await confirmAction('Reset local data?','Discard all edits on this device and reload the published teams.json?'))try{const fresh=await loadPublished();localStorage.removeItem(STORAGE_KEY);data=fresh;renderLeaderboard();renderAdmin();announce('Published data restored.')}catch{announce('Published data could not be loaded.',true)}};
