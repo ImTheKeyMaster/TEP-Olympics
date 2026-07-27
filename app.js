@@ -15,10 +15,11 @@
   const $ = id => document.getElementById(id);
   let data = { maximumScore: 100, updatedAt: new Date().toISOString(), teams: [] };
   let deferredInstall = null, pendingWorker = null, toastTimer;
+  const teamRowElements = new Map();
   const revealState = {
     active: false, startedAt: 0, duration: 10000, displayedScores: new Map(),
-    targetScores: new Map(), rows: new Map(), frame: 0, lastTurnAt: 0,
-    nextTeamIndex: 0, reducedMotion: false
+    targetScores: new Map(), frame: 0, lastRankAt: 0, activeTeamId: null,
+    reducedMotion: false, winnerTimer: 0
   };
 
   function validateDocument(value) {
@@ -71,58 +72,71 @@
 
   function createLeaderboardRow(team,index,displayedScore=team.score) {
     const li=document.createElement('li'); li.className='team-row'; li.dataset.teamId=team.id;
+    const content=document.createElement('div'); content.className='team-row-content';
     const rank=document.createElement('span'); rank.className='rank';
     const img=document.createElement('img'); img.className='team-icon'; img.alt=''; img.loading='lazy'; img.referrerPolicy='no-referrer'; img.src=safeIconUrl(team.iconUrl)||FALLBACK_ICON; img.addEventListener('error',()=>{if(!img.src.endsWith(FALLBACK_ICON))img.src=FALLBACK_ICON;},{once:true});
     const main=document.createElement('div'); main.className='team-main'; const name=document.createElement('div'); name.className='team-name'; name.textContent=team.name; name.title=team.name;
     const progress=document.createElement('div'); progress.className='progress'; progress.setAttribute('role','progressbar'); progress.setAttribute('aria-valuemin','0'); progress.setAttribute('aria-valuemax',String(data.maximumScore)); progress.style.setProperty('--hue',hashHue(team.id));
-    const fill=document.createElement('div'); fill.className='progress-fill'; const score=document.createElement('span'); score.className='score-label'; progress.append(fill,score); main.append(name,progress); li.append(rank,img,main);
-    updateLeaderboardRow(li,team,displayedScore,index,false); return li;
+    const fill=document.createElement('div'); fill.className='progress-fill'; const score=document.createElement('span'); score.className='score-label'; progress.append(fill,score); main.append(name,progress); content.append(rank,img,main); li.append(content);
+    const elements={team,row:li,content,rank,img,progress,fill,label:score}; teamRowElements.set(team.id,elements);
+    updateTeamVisuals(team.id,displayedScore); updateTeamRank(team.id,index); return li;
   }
-  function updateLeaderboardRow(row,team,score,index,animateFill=true) {
-    const rank=row.querySelector('.rank'), progress=row.querySelector('.progress'), fill=row.querySelector('.progress-fill'), label=row.querySelector('.score-label');
-    rank.className='rank'+(index<3?' medal':''); rank.textContent=['🥇','🥈','🥉'][index] || String(index+1); rank.setAttribute('aria-label',`Rank ${index+1}`);
+  function updateTeamRank(teamId,index) {
+    const {rank}=teamRowElements.get(teamId); rank.className='rank'+(index<3?' medal':''); rank.textContent=['🥇','🥈','🥉'][index] || String(index+1); rank.setAttribute('aria-label',`Rank ${index+1}`);
+  }
+  function updateTeamVisuals(teamId,score,displayPrecision=null) {
+    const elements=teamRowElements.get(teamId); if(!elements)return;
+    const {team,progress,fill,label}=elements, displayedScore=displayPrecision===null?score:Number(score.toFixed(displayPrecision));
     const pct=data.maximumScore ? score/data.maximumScore*100 : 0, clamped=Math.min(100,Math.max(0,pct));
-    label.textContent=`${formatNumber(score)} / ${formatNumber(data.maximumScore)}`; progress.setAttribute('aria-label',`${team.name}: ${formatNumber(score)} of ${formatNumber(data.maximumScore)} points, ${Math.round(pct)} percent`); progress.setAttribute('aria-valuenow',String(Math.min(score,data.maximumScore)));
-    if(!animateFill)fill.style.transition='none'; fill.style.width=`${clamped}%`; if(!animateFill)requestAnimationFrame(()=>fill.style.removeProperty('transition'));
+    label.textContent=`${formatNumber(displayedScore)} / ${formatNumber(data.maximumScore)}`; progress.setAttribute('aria-label',`${team.name}: ${formatNumber(displayedScore)} of ${formatNumber(data.maximumScore)} points, ${Math.round(pct)} percent`); progress.setAttribute('aria-valuenow',String(Math.min(score,data.maximumScore)));
+    fill.style.setProperty('--progress',String(clamped/100));
   }
 
   function renderLeaderboard() {
-    const list=$('leaderboard'); list.replaceChildren(); const teams=sortedTeams();
+    const list=$('leaderboard'); list.replaceChildren(); teamRowElements.clear(); const teams=sortedTeams();
     teams.forEach((team,index)=>list.append(createLeaderboardRow(team,index)));
     $('emptyState').hidden=teams.length>0; $('teamCount').textContent=`${teams.length} ${teams.length===1?'team':'teams'}`; $('updatedAt').dateTime=data.updatedAt; $('updatedAt').textContent=formatDate(data.updatedAt);
   }
 
   function reorderRevealRows(teams) {
-    const list=$('leaderboard'), oldPositions=new Map();
-    if(!revealState.reducedMotion)teams.forEach(team=>oldPositions.set(team.id,revealState.rows.get(team.id).getBoundingClientRect().top));
-    teams.forEach((team,index)=>{const row=revealState.rows.get(team.id);list.append(row);updateLeaderboardRow(row,team,revealState.displayedScores.get(team.id),index)});
-    if(!revealState.reducedMotion)teams.forEach(team=>{const row=revealState.rows.get(team.id),delta=oldPositions.get(team.id)-row.getBoundingClientRect().top;if(delta)row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:360,easing:'cubic-bezier(.2,.8,.2,1)'})});
+    const list=$('leaderboard'), current=[...list.children].map(row=>row.dataset.teamId), next=teams.map(team=>team.id);
+    if(current.every((id,index)=>id===next[index]))return;
+    const oldPositions=new Map(); if(!revealState.reducedMotion)current.forEach(id=>oldPositions.set(id,teamRowElements.get(id).row.getBoundingClientRect().top));
+    teams.forEach((team,index)=>{list.append(teamRowElements.get(team.id).row);updateTeamRank(team.id,index)});
+    if(!revealState.reducedMotion)teams.forEach(team=>{const row=teamRowElements.get(team.id).row,delta=oldPositions.get(team.id)-row.getBoundingClientRect().top;if(delta)row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.2,.8,.2,1)'})});
+  }
+  function updateActiveTeamHighlight(teamId) {
+    if(teamId===revealState.activeTeamId)return;
+    if(revealState.activeTeamId)teamRowElements.get(revealState.activeTeamId)?.content.classList.remove('is-advancing');
+    revealState.activeTeamId=teamId; if(teamId)teamRowElements.get(teamId)?.content.classList.add('is-advancing');
+  }
+  function revealCurve(teamIndex,progress) {
+    const count=Math.max(1,data.teams.length), delay=revealState.reducedMotion?0:(teamIndex/count)*.07;
+    const local=Math.max(0,Math.min(1,(progress-delay)/(1-delay)));
+    return 1-Math.pow(1-local,3);
   }
   function finishReveal() {
     if(!revealState.active)return; cancelAnimationFrame(revealState.frame);
-    data.teams.forEach(team=>revealState.displayedScores.set(team.id,revealState.targetScores.get(team.id)));
-    const finalTeams=sortedTeams(team=>revealState.displayedScores.get(team.id)); reorderRevealRows(finalTeams); revealState.rows.forEach(row=>row.classList.remove('is-advancing'));
-    if(finalTeams[0]){const winner=revealState.rows.get(finalTeams[0].id);winner.classList.add('is-winner');setTimeout(()=>winner?.classList.remove('is-winner'),1600)}
+    data.teams.forEach(team=>{const score=revealState.targetScores.get(team.id);revealState.displayedScores.set(team.id,score);updateTeamVisuals(team.id,score);teamRowElements.get(team.id).fill.style.removeProperty('will-change')});
+    const finalTeams=sortedTeams(team=>revealState.displayedScores.get(team.id)); reorderRevealRows(finalTeams); updateActiveTeamHighlight(null); $('revealProgress').style.setProperty('--progress','1'); $('revealProgress').style.removeProperty('will-change');
+    if(finalTeams[0]){const winner=teamRowElements.get(finalTeams[0].id).content;winner.classList.add('is-winner');clearTimeout(revealState.winnerTimer);revealState.winnerTimer=setTimeout(()=>winner?.classList.remove('is-winner'),1600)}
     revealState.active=false; $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true;
     announce(finalTeams.length?`Score reveal complete. ${finalTeams[0].name} is in first place.`:'Score reveal complete.');
   }
   function cancelReveal() {
-    if(!revealState.active)return; cancelAnimationFrame(revealState.frame); revealState.active=false; revealState.rows.clear();
-    $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true; renderLeaderboard();
+    if(!revealState.active)return; cancelAnimationFrame(revealState.frame); revealState.active=false; updateActiveTeamHighlight(null);
+    $('revealProgress').style.removeProperty('will-change'); $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true; renderLeaderboard();
   }
   function revealFrame(now) {
-    if(!revealState.active)return; const elapsed=now-revealState.startedAt, progress=Math.min(1,elapsed/revealState.duration); $('revealProgress').style.width=`${progress*100}%`;
-    const turnDelay=progress>.8?(revealState.reducedMotion?80:180):(revealState.reducedMotion?35:80);
-    if(now-revealState.lastTurnAt>=turnDelay || progress===1) {
-      revealState.lastTurnAt=now; const teams=data.teams, team=teams[revealState.nextTeamIndex++%Math.max(1,teams.length)]; revealState.rows.forEach(row=>row.classList.remove('is-advancing'));
-      if(team){const target=revealState.targetScores.get(team.id),factor=10**scorePrecision(target),eased=1-Math.pow(1-progress,progress>.8?2.4:1.25);let next=Math.round(target*eased*factor)/factor;next=Math.max(revealState.displayedScores.get(team.id),Math.min(target,next));revealState.displayedScores.set(team.id,next);revealState.rows.get(team.id).classList.add('is-advancing');reorderRevealRows(sortedTeams(item=>revealState.displayedScores.get(item.id)))}
-    }
+    if(!revealState.active)return; const elapsed=now-revealState.startedAt, progress=Math.min(1,elapsed/revealState.duration); $('revealProgress').style.setProperty('--progress',String(progress));
+    data.teams.forEach((team,index)=>{const target=revealState.targetScores.get(team.id),score=Math.min(target,target*revealCurve(index,progress));revealState.displayedScores.set(team.id,score);updateTeamVisuals(team.id,score,Math.max(1,scorePrecision(target)))});
+    if(!revealState.reducedMotion){const activeIndex=Math.floor(elapsed/700)%data.teams.length;updateActiveTeamHighlight(data.teams[activeIndex]?.id);if(now-revealState.lastRankAt>=200){revealState.lastRankAt=now;reorderRevealRows(sortedTeams(item=>revealState.displayedScores.get(item.id)))}}
     if(progress===1)finishReveal();else revealState.frame=requestAnimationFrame(revealFrame);
   }
   function startReveal() {
-    if(revealState.active||!data.teams.length)return; revealState.active=true;revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;revealState.duration=revealState.reducedMotion?1000:10000;revealState.startedAt=performance.now();revealState.lastTurnAt=-Infinity;revealState.nextTeamIndex=0;revealState.displayedScores.clear();revealState.targetScores.clear();revealState.rows.clear();
-    data.teams.forEach(team=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score)});const initial=sortedTeams(team=>revealState.displayedScores.get(team.id)),list=$('leaderboard');list.replaceChildren();initial.forEach((team,index)=>{const row=createLeaderboardRow(team,index,0);revealState.rows.set(team.id,row);list.append(row)});
-    $('revealButton').disabled=true;$('revealButton').textContent='Revealing...';$('revealStatus').hidden=false;$('revealProgress').style.width='0%';announce('Score reveal started.');revealState.frame=requestAnimationFrame(revealFrame);
+    if(revealState.active||!data.teams.length)return; cancelAnimationFrame(revealState.frame);clearTimeout(revealState.winnerTimer);teamRowElements.forEach(({content})=>content.classList.remove('is-winner'));revealState.active=true;revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;revealState.duration=revealState.reducedMotion?1000:10000;revealState.startedAt=performance.now();revealState.lastRankAt=-Infinity;revealState.activeTeamId=null;revealState.displayedScores.clear();revealState.targetScores.clear();
+    data.teams.forEach(team=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score);updateTeamVisuals(team.id,0);if(!revealState.reducedMotion)teamRowElements.get(team.id).fill.style.willChange='transform'});if(!revealState.reducedMotion)reorderRevealRows(sortedTeams(team=>revealState.displayedScores.get(team.id)));
+    $('revealButton').disabled=true;$('revealButton').textContent='Revealing...';$('revealStatus').hidden=false;$('revealProgress').style.setProperty('--progress','0');$('revealProgress').style.willChange='transform';announce('Score reveal started.');revealState.frame=requestAnimationFrame(revealFrame);
   }
   function renderAdmin() {
     $('maximumScore').value=data.maximumScore; const editor=$('teamEditor'); editor.replaceChildren();
