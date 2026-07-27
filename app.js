@@ -2,15 +2,15 @@
   'use strict';
   const STORAGE_KEY = 'tep-hunt-data-v1';
   const SESSION_KEY = 'tep-hunt-admin';
-  const FALLBACK_ICON = 'icons/default-team.svg';
+  const FALLBACK_ICON = 'icons/lamp.png';
   const AVAILABLE_TEAM_ICONS = [
-    { path: 'icons/lamp.svg', label: 'Lamp' },
-    { path: 'icons/open-book.svg', label: 'Open Book' },
-    { path: 'icons/scroll.svg', label: 'Scroll' },
-    { path: 'icons/star.svg', label: 'Star' },
-    { path: 'icons/sword.svg', label: 'Sword' },
-    { path: 'icons/sword.png', label: 'Sword (PNG)' },
-    { path: 'icons/three-plumes.svg', label: 'Three Plumes' }
+    { path: 'icons/lamp.png', label: 'Lamp' },
+    { path: 'icons/open-book.png', label: 'Open Book' },
+    { path: 'icons/scroll.png', label: 'Scroll' },
+    { path: 'icons/star.png', label: 'Star' },
+    { path: 'icons/sword.png', label: 'Sword' },
+    { path: 'icons/three-plumes.png', label: 'Three Plumes' },
+    { path: 'icons/torch.png', label: 'Torch' }
   ];
   const $ = id => document.getElementById(id);
   let data = { maximumScore: 100, updatedAt: new Date().toISOString(), teams: [] };
@@ -28,7 +28,7 @@
       const name = typeof team.name === 'string' ? team.name.trim() : '';
       const id = typeof team.id === 'string' ? team.id.trim() : '';
       const score = Number(team.score);
-      const iconUrl = typeof team.iconUrl === 'string' ? team.iconUrl.trim() : '';
+      const iconUrl = normalizeIconUrl(typeof team.iconUrl === 'string' ? team.iconUrl.trim() : '');
       if (!id || ids.has(id)) errors.push(`Team ${index + 1} needs a unique ID.`); else ids.add(id);
       if (!name) errors.push(`Team ${index + 1} needs a name.`);
       else if (names.has(name.toLocaleLowerCase())) errors.push(`Team name “${name}” is duplicated.`); else names.add(name.toLocaleLowerCase());
@@ -45,6 +45,7 @@
     if (!value) return '';
     try { const u = new URL(value, document.baseURI); return ['http:', 'https:'].includes(u.protocol) ? value : ''; } catch { return ''; }
   }
+  function normalizeIconUrl(value) { return value.replace(/\.svg$/i, '.png'); }
   function matchingBuiltInIcon(value) {
     if (!value) return '';
     try {
@@ -107,7 +108,7 @@
   }
   function saveTeam(event,id) {
     event.preventDefault(); const form=event.currentTarget, button=form.querySelector('[type=submit]'); if(button.disabled)return; button.disabled=true;
-    form.querySelectorAll('.field-error').forEach(e=>e.textContent=''); const name=form.querySelector('[data-field=name]').value.trim(), selectedIcon=form.querySelector('[data-field=builtInIcon]:checked'), customIcon=form.querySelector('[data-field=iconUrl]').value.trim(), iconUrl=selectedIcon?.value || customIcon, raw=form.querySelector('[data-field=score]').value, score=Number(raw); let valid=true;
+    form.querySelectorAll('.field-error').forEach(e=>e.textContent=''); const name=form.querySelector('[data-field=name]').value.trim(), selectedIcon=form.querySelector('[data-field=builtInIcon]:checked'), customIcon=form.querySelector('[data-field=iconUrl]').value.trim(), iconUrl=normalizeIconUrl(selectedIcon?.value || customIcon), raw=form.querySelector('[data-field=score]').value, score=Number(raw); let valid=true;
     const error=(field,msg)=>{form.querySelector(`[data-error=${field}]`).textContent=msg;valid=false}; if(!name)error('name','A team name is required.'); if(data.teams.some(t=>t.id!==id&&t.name.toLowerCase()===name.toLowerCase()))error('name','Team names must be unique.'); if(raw.trim()===''||!Number.isFinite(score)||score<0)error('score','Enter a score of zero or greater.'); if(iconUrl&&!safeIconUrl(iconUrl))error('iconUrl','Use an http(s) URL or safe relative path.');
     if(!valid){announce('Please correct the highlighted fields.',true);button.disabled=false;return} const team=data.teams.find(t=>t.id===id); Object.assign(team,{name,iconUrl,score}); delete team._isNew; persist('Team saved.'); button.disabled=false;
   }
