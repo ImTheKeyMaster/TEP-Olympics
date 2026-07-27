@@ -77,10 +77,24 @@
     if(!valid){announce('Please correct the highlighted fields.',true);button.disabled=false;return} const team=data.teams.find(t=>t.id===id); Object.assign(team,{name,iconUrl,score}); delete team._isNew; persist('Team saved.'); button.disabled=false;
   }
   async function removeTeam(team) { if(await confirmAction('Remove team?',`Remove ${team.name} from this device's leaderboard?`)){data.teams=data.teams.filter(t=>t.id!==team.id);persist('Team removed.')} }
-  function persist(message) { data.updatedAt=new Date().toISOString(); localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); renderLeaderboard(); renderAdmin(); announce(message); }
+  function persist(message) { data.updatedAt=new Date().toISOString(); try { localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); } catch(error) { console.warn('Local data could not be saved:',error); announce('Changes are visible, but could not be saved on this device.',true); renderLeaderboard(); renderAdmin(); return; } renderLeaderboard(); renderAdmin(); announce(message); }
   function newId(){return crypto.randomUUID?.() || `team-${Date.now()}-${Math.random().toString(36).slice(2,9)}`}
   async function loadPublished() { const response=await fetch('data/teams.json',{cache:'no-cache'}); if(!response.ok)throw new Error('Published data unavailable'); const result=validateDocument(await response.json()); if(!result.valid)throw new Error(result.errors.join(' ')); return result.data; }
-  async function loadData() { try { const local=localStorage.getItem(STORAGE_KEY); if(local){const result=validateDocument(JSON.parse(local));if(result.valid){data=result.data;return}localStorage.removeItem(STORAGE_KEY);announce('Saved data was invalid; using published data.',true)} data=await loadPublished(); } catch(error){console.warn(error);data={maximumScore:100,updatedAt:new Date().toISOString(),teams:[]};announce('Published data could not be loaded. Safe defaults are in use.',true)} }
+  async function loadData() {
+    let local = null;
+    try { local=localStorage.getItem(STORAGE_KEY); } catch(error) { console.warn('Local data is unavailable:',error); }
+    if(local) {
+      try {
+        const result=validateDocument(JSON.parse(local));
+        if(result.valid){data=result.data;return}
+        console.warn('Ignoring invalid local data:',result.errors);
+      } catch(error) { console.warn('Ignoring malformed local data:',error); }
+      try { localStorage.removeItem(STORAGE_KEY); } catch(error) { console.warn('Invalid local data could not be removed:',error); }
+      announce('Saved data was invalid; using published data.',true);
+    }
+    try { data=await loadPublished(); }
+    catch(error){console.warn(error);data={maximumScore:100,updatedAt:new Date().toISOString(),teams:[]};announce('Published data could not be loaded. Safe defaults are in use.',true)}
+  }
 
   function authorized(){return sessionStorage.getItem(SESSION_KEY)==='yes'}
   // Client-side authentication only deters casual access; source inspection can reveal or bypass it.
