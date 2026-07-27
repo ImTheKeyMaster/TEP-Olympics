@@ -106,18 +106,17 @@
   }
 
   function reorderRevealRows(teams,now=performance.now()) {
-    if(!revealState.reducedMotion&&now<revealState.movementUntil)return {changed:false,newLeader:false};
+    if(!revealState.reducedMotion&&now<revealState.movementUntil)return {changed:false};
     const list=$('leaderboard'), current=[...list.children].map(row=>row.dataset.teamId), next=teams.map(team=>team.id);
-    if(current.every((id,index)=>id===next[index]))return {changed:false,newLeader:false};
+    if(current.every((id,index)=>id===next[index]))return {changed:false};
     const oldRanks=new Map(current.map((id,index)=>[id,index])), newRanks=new Map(next.map((id,index)=>[id,index]));
     const oldPositions=new Map(); if(!revealState.reducedMotion)current.forEach(id=>oldPositions.set(id,teamRowElements.get(id).row.getBoundingClientRect().top));
     teams.forEach((team,index)=>{list.append(teamRowElements.get(team.id).row);updateTeamRank(team.id,index,false)});
     if(!revealState.reducedMotion){teams.forEach(team=>{const row=teamRowElements.get(team.id).row,delta=oldPositions.get(team.id)-row.getBoundingClientRect().top;if(delta)row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.2,.8,.2,1)'})});revealState.movementUntil=now+190}
     const gains=teams.map(team=>({id:team.id,from:oldRanks.get(team.id),to:newRanks.get(team.id)})).filter(move=>move.from>move.to);
     const prioritized=gains.sort((a,b)=>(a.to===0?-1:0)-(b.to===0?-1:0)||(b.from-b.to)-(a.from-a.to)||a.to-b.to);
-    const highlighted=prioritized.find(move=>highlightTeam(move.id,move.to===0?'first-place':'rank-gain',now));
-    const highlightDuration=highlighted?(highlighted.to===0?900:500):0;
-    return {changed:true,visualUntil:Math.max(revealState.movementUntil,now+highlightDuration)};
+    prioritized.some(move=>highlightTeam(move.id,move.to===0?'first-place':'rank-gain',now));
+    return {changed:true,visualUntil:revealState.movementUntil};
   }
   const HIGHLIGHT_CLASSES=['is-rank-gain','is-first-place','is-score-settled','is-final-winner'];
   function clearTeamHighlight(teamId) {
