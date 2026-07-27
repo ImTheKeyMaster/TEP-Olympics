@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#33145f">
+  <meta name="description" content="The 2026 Grand Chapter Scavenger Hunt leaderboard">
+  <title>2026 Grand Chapter Scavenger Hunt</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#leaderboard" aria-label="Go to leaderboard"><span class="brand-mark" aria-hidden="true">ΤΕΦ</span><span>Grand Chapter 2026</span></a>
+    <button id="menuButton" class="icon-button menu-button" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button>
+  </header>
+  <div id="scrim" class="scrim" hidden></div>
+  <nav id="drawer" class="drawer" aria-label="Main navigation" aria-hidden="true">
+    <div class="drawer-heading"><span>Menu</span><button id="closeMenu" class="icon-button" aria-label="Close navigation menu">×</button></div>
+    <a href="#leaderboard" data-route="leaderboard">🏆 Leaderboard</a>
+    <a href="#admin" data-route="admin">⚙️ Admin</a>
+    <button id="installButton" type="button" hidden>⬇️ Install App</button>
+    <button id="refreshButton" type="button">↻ Refresh</button>
+    <a href="#about" data-route="about">ⓘ About</a>
+  </nav>
+
+  <main>
+    <section id="leaderboardScreen" class="screen hero-screen" aria-labelledby="mainTitle">
+      <div class="hero">
+        <p class="eyebrow">Tau Epsilon Phi presents</p>
+        <h1 id="mainTitle">2026 Grand Chapter<br><span>Scavenger Hunt</span></h1>
+        <div class="updated">Live standings · Updated <time id="updatedAt">—</time></div>
+      </div>
+      <div class="leaderboard-card">
+        <div class="leaderboard-heading"><h2>Leaderboard</h2><span id="teamCount"></span></div>
+        <ol id="leaderboard" class="leaderboard"></ol>
+        <div id="emptyState" class="empty-state" hidden><strong>No teams yet</strong><p>Check back soon for the first competitors.</p></div>
+      </div>
+    </section>
+
+    <section id="loginScreen" class="screen narrow" hidden aria-labelledby="loginTitle">
+      <div class="panel login-panel"><p class="eyebrow">Restricted access</p><h1 id="loginTitle">Administrator sign in</h1><p>Enter the event password to manage the local leaderboard.</p>
+        <form id="loginForm" novalidate><label for="password">Password</label><div class="password-row"><input id="password" type="password" autocomplete="current-password" required><button id="togglePassword" type="button" class="secondary" aria-label="Show password">Show</button></div><p id="loginError" class="field-error" aria-live="polite"></p><button class="primary full" type="submit">Sign in</button></form>
+      </div>
+    </section>
+
+    <section id="adminScreen" class="screen admin" hidden aria-labelledby="adminTitle">
+      <div class="page-heading"><div><p class="eyebrow">Event controls</p><h1 id="adminTitle">Leaderboard Admin</h1><p>Changes are saved only on this device.</p></div><button id="logoutButton" class="secondary">Log Out</button></div>
+      <div class="panel"><h2>Maximum score</h2><form id="maximumForm" class="inline-form" novalidate><div><label for="maximumScore">Points available</label><input id="maximumScore" type="number" min="0.01" step="any" required><p id="maximumError" class="field-error"></p></div><button class="primary" type="submit">Save maximum</button></form></div>
+      <div class="panel"><div class="section-heading"><div><h2>Teams</h2><p>Edit competitors and scores.</p></div><button id="addTeam" class="primary">+ Add team</button></div><div id="teamEditor" class="team-editor"></div></div>
+      <div class="panel"><h2>JSON Data</h2><p>Export and commit <code>teams.json</code> to <code>data/teams.json</code> in GitHub to publish changes for everyone. Local edits do not sync to other devices.</p><div class="button-group"><button id="exportJson" class="secondary">Export JSON</button><button id="importJson" class="secondary">Import JSON</button><button id="copyJson" class="secondary">Copy JSON</button><button id="resetData" class="danger">Reset to Published Data</button></div><input id="importFile" type="file" accept="application/json,.json" hidden></div>
+    </section>
+
+    <section id="aboutScreen" class="screen narrow" hidden aria-labelledby="aboutTitle"><div class="panel about"><p class="eyebrow">About the event</p><h1 id="aboutTitle">A race to the finish</h1><p>Follow the 2026 Grand Chapter Scavenger Hunt as teams compete for the top spot. Scores on this device reflect the latest published data plus any local administrator updates.</p><p>Install this app to keep the leaderboard handy and available offline.</p><a class="primary button-link" href="#leaderboard">View leaderboard</a></div></section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="updateNotice" class="update-notice" hidden><span>A new app version is ready.</span><button id="applyUpdate">Reload</button></div>
+  <dialog id="confirmDialog"><form method="dialog"><h2 id="dialogTitle">Confirm action</h2><p id="dialogMessage"></p><div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button value="confirm" class="danger">Confirm</button></div></form></dialog>
+  <script src="app.js" defer></script>
+</body>
+</html>
