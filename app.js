@@ -20,7 +20,8 @@
     active: false, startedAt: 0, duration: 10000, displayedScores: new Map(),
     targetScores: new Map(), frame: 0, lastRankAt: 0, settledTeams: new Set(),
     highlightTimers: new Map(), highlightCooldowns: new Map(), reducedMotion: false,
-    schedule: [], nextEvent: 0, teams: new Map(), settlingAt: 0, movementUntil: 0
+    schedule: [], nextEvent: 0, teams: new Map(), settlingAt: 0, movementUntil: 0,
+    racePhase: 'scoring', pauseUntil: 0, lastPauseAt: -Infinity
   };
 
   function validateDocument(value) {
@@ -103,16 +104,18 @@
   }
 
   function reorderRevealRows(teams,now=performance.now()) {
-    if(!revealState.reducedMotion&&now<revealState.movementUntil)return false;
+    if(!revealState.reducedMotion&&now<revealState.movementUntil)return {changed:false,newLeader:false};
     const list=$('leaderboard'), current=[...list.children].map(row=>row.dataset.teamId), next=teams.map(team=>team.id);
-    if(current.every((id,index)=>id===next[index]))return false;
+    if(current.every((id,index)=>id===next[index]))return {changed:false,newLeader:false};
+    const newLeader=current[0]!==next[0];
     const oldRanks=new Map(current.map((id,index)=>[id,index])), newRanks=new Map(next.map((id,index)=>[id,index]));
     const oldPositions=new Map(); if(!revealState.reducedMotion)current.forEach(id=>oldPositions.set(id,teamRowElements.get(id).row.getBoundingClientRect().top));
     teams.forEach((team,index)=>{list.append(teamRowElements.get(team.id).row);updateTeamRank(team.id,index,false)});
     if(!revealState.reducedMotion){teams.forEach(team=>{const row=teamRowElements.get(team.id).row,delta=oldPositions.get(team.id)-row.getBoundingClientRect().top;if(delta)row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.2,.8,.2,1)'})});revealState.movementUntil=now+190}
     const gains=teams.map(team=>({id:team.id,from:oldRanks.get(team.id),to:newRanks.get(team.id)})).filter(move=>move.from>move.to);
     const prioritized=gains.sort((a,b)=>(a.to===0?-1:0)-(b.to===0?-1:0)||(b.from-b.to)-(a.from-a.to)||a.to-b.to);
-    return prioritized.some(move=>highlightTeam(move.id,move.to===0?'first-place':'rank-gain',now));
+    prioritized.some(move=>highlightTeam(move.id,move.to===0?'first-place':'rank-gain',now));
+    return {changed:true,newLeader};
   }
   const HIGHLIGHT_CLASSES=['is-rank-gain','is-first-place','is-score-settled','is-final-winner'];
   function clearTeamHighlight(teamId) {
@@ -139,15 +142,15 @@
       if(units<=0)return;
       const normalized=highest?target/highest:0, weight=clamp(1.25-normalized*.65,.6,1.4);
       const desired=Math.round(clamp((54/Math.max(1,teams.length))*weight,7,16)), count=Math.min(units,desired);
-      const openingCount=Math.min(count-1,units<4?1:(Math.random()<.55?2:1));
+      const openingCount=Math.min(count-1,1);
       const middleCount=Math.max(0,Math.round((count-1-openingCount)*.55));
       const phaseCounts=[openingCount,middleCount,count-1-openingCount-middleCount];
-      const openingShare=.1+Math.random()*.15, middleShare=.38+Math.random()*.12;
+      const openingShare=.045+Math.random()*.045, middleShare=.43+Math.random()*.1;
       const phaseUnits=[Math.max(openingCount,Math.round(units*openingShare)),Math.max(middleCount,Math.round(units*middleShare))];
       if(phaseUnits[0]+phaseUnits[1]>units-phaseCounts[2]-1)phaseUnits[1]=Math.max(middleCount,units-phaseUnits[0]-phaseCounts[2]-1);
       phaseUnits.push(units-phaseUnits[0]-phaseUnits[1]-1);
-      const firstUpdate=clamp(450+Math.random()*1630+normalized*120,450,2200);
-      [[firstUpdate,2900],[3100,6900],[7050,9420]].forEach(([start,end],phase)=>{
+      const firstUpdate=clamp(900+Math.random()*1450+normalized*120,900,2450);
+      [[firstUpdate,2850],[3000,6500],[6650,9420]].forEach(([start,end],phase)=>{
         const n=phaseCounts[phase], budget=phaseUnits[phase]; if(!n)return;
         let allocated=0;
         for(let i=0;i<n;i++){
@@ -161,9 +164,9 @@
       events.push({time:duration-220+Math.random()*100,teamId:team.id,amount:1/scale,final:true});
     });
     events.sort((a,b)=>a.time-b.time);
-    let lastOpening=150; const lastTeamOpening=new Map();
+    let lastOpening=300; const lastTeamOpening=new Map();
     events.filter(event=>event.time<3000).forEach(event=>{
-      event.time=Math.max(event.time,lastOpening+250+Math.random()*100,(lastTeamOpening.get(event.teamId)??-Infinity)+500);
+      event.time=Math.max(event.time,lastOpening+475+Math.random()*175,(lastTeamOpening.get(event.teamId)??-Infinity)+700);
       lastOpening=event.time; lastTeamOpening.set(event.teamId,event.time);
     });
     return events.sort((a,b)=>a.time-b.time);
@@ -182,6 +185,15 @@
     const displayed=roundToPrecision(state.visualScore,state.precision); revealState.displayedScores.set(teamId,displayed); updateTeamVisuals(teamId,state.visualScore,state.precision);
     if(state.targetScore>0&&progress===1&&state.visualScore===state.targetScore&&!revealState.settledTeams.has(teamId)){revealState.settledTeams.add(teamId);highlightTeam(teamId,'score-settled',now)}
   }
+  function scoreAnimationsFinished(now) {
+    return [...revealState.teams.values()].every(state=>now>=state.animationStartTime+state.animationDuration);
+  }
+  function compressRemainingSchedule(elapsed) {
+    const remaining=revealState.schedule.slice(revealState.nextEvent); if(!remaining.length)return;
+    const oldStart=Math.min(...remaining.map(event=>event.time)), oldEnd=Math.max(...remaining.map(event=>event.time));
+    const newStart=elapsed+80, newEnd=Math.max(newStart,revealState.duration-220), span=Math.max(1,oldEnd-oldStart);
+    remaining.forEach(event=>{event.time=newStart+(event.time-oldStart)/span*(newEnd-newStart)});
+  }
   function finishReveal(now) {
     data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.committedScore=state.targetScore;revealState.displayedScores.set(team.id,state.targetScore);updateTeamVisuals(team.id,state.targetScore);teamRowElements.get(team.id).fill.style.removeProperty('will-change')});
     reorderRevealRows(sortedTeams(team=>revealState.targetScores.get(team.id)),now); clearAllHighlights(); revealState.settlingAt=now+220;
@@ -193,7 +205,7 @@
     announce(finalTeams.length?`Score reveal complete. ${finalTeams[0].name} is in first place.`:'Score reveal complete.');
   }
   function cancelReveal() {
-    clearAllHighlights(); cancelAnimationFrame(revealState.frame); revealState.schedule=[]; revealState.teams.clear(); revealState.settlingAt=0;
+    clearAllHighlights(); cancelAnimationFrame(revealState.frame); revealState.schedule=[]; revealState.teams.clear(); revealState.settlingAt=0; revealState.racePhase='scoring'; revealState.pauseUntil=0;
     revealState.active=false; revealState.displayedScores.clear(); revealState.targetScores.clear(); revealState.movementUntil=0; $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true; renderLeaderboard();
   }
   function revealFrame(now) {
@@ -201,12 +213,22 @@
     if(revealState.settlingAt){if(now>=revealState.settlingAt)completeReveal(now);else revealState.frame=requestAnimationFrame(revealFrame);return}
     const elapsed=now-revealState.startedAt;
     if(revealState.reducedMotion){const progress=clamp(elapsed/revealState.duration,0,1);data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.targetScore*(1-(1-progress)**3);const displayed=roundToPrecision(state.visualScore,state.precision);revealState.displayedScores.set(team.id,displayed);updateTeamVisuals(team.id,state.visualScore,state.precision)})}
-    else {while(revealState.nextEvent<revealState.schedule.length&&revealState.schedule[revealState.nextEvent].time<=elapsed)beginTeamIncrement(revealState.schedule[revealState.nextEvent++],now);data.teams.forEach(team=>updateTeamScoreAnimation(team.id,now));const rankInterval=elapsed<3000?300:125;if(now-revealState.lastRankAt>=rankInterval){revealState.lastRankAt=now;reorderRevealRows(sortedTeams(team=>revealState.displayedScores.get(team.id)??0),now)}}
-    if(elapsed>=revealState.duration&&now>=revealState.movementUntil)finishReveal(now); revealState.frame=requestAnimationFrame(revealFrame);
+    else {
+      if(revealState.racePhase==='pause'&&now>=revealState.pauseUntil){compressRemainingSchedule(elapsed);revealState.racePhase='scoring'}
+      if(revealState.racePhase==='scoring')while(revealState.nextEvent<revealState.schedule.length&&revealState.schedule[revealState.nextEvent].time<=elapsed)beginTeamIncrement(revealState.schedule[revealState.nextEvent++],now);
+      data.teams.forEach(team=>updateTeamScoreAnimation(team.id,now));
+      if(revealState.racePhase==='awaiting-reorder'&&scoreAnimationsFinished(now)){
+        const change=reorderRevealRows(sortedTeams(team=>revealState.displayedScores.get(team.id)??0),now);
+        if(change.changed){const canPause=now-revealState.lastPauseAt>=750,pause=canPause?(change.newLeader?1500:1000):0;revealState.lastPauseAt=canPause?now:revealState.lastPauseAt;revealState.pauseUntil=revealState.movementUntil+pause;revealState.racePhase=pause?'pause':'scoring'}else revealState.racePhase='scoring';
+      }
+      const rankInterval=elapsed<3000?500:150;
+      if(revealState.racePhase==='scoring'&&now-revealState.lastRankAt>=rankInterval){revealState.lastRankAt=now;const current=[...$('leaderboard').children].map(row=>row.dataset.teamId),next=sortedTeams(team=>revealState.displayedScores.get(team.id)??0).map(team=>team.id);if(current.some((id,index)=>id!==next[index]))revealState.racePhase='awaiting-reorder'}
+    }
+    if(elapsed>=revealState.duration&&revealState.racePhase==='scoring'&&scoreAnimationsFinished(now)&&now>=revealState.movementUntil)finishReveal(now); revealState.frame=requestAnimationFrame(revealFrame);
   }
   function startReveal() {
     if(revealState.active||!data.teams.length)return; cancelAnimationFrame(revealState.frame);clearAllHighlights();revealState.active=true;revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const allZero=data.teams.every(team=>team.score===0);revealState.duration=revealState.reducedMotion?1000:(allZero?1200:10000);revealState.lastRankAt=-Infinity;revealState.nextEvent=0;revealState.settlingAt=0;revealState.movementUntil=0;revealState.displayedScores.clear();revealState.targetScores.clear();revealState.settledTeams.clear();revealState.highlightCooldowns.clear();revealState.teams.clear();
+    const allZero=data.teams.every(team=>team.score===0);revealState.duration=revealState.reducedMotion?1000:(allZero?1200:10000);revealState.lastRankAt=-Infinity;revealState.nextEvent=0;revealState.settlingAt=0;revealState.movementUntil=0;revealState.racePhase='scoring';revealState.pauseUntil=0;revealState.lastPauseAt=-Infinity;revealState.displayedScores.clear();revealState.targetScores.clear();revealState.settledTeams.clear();revealState.highlightCooldowns.clear();revealState.teams.clear();
     data.teams.forEach(team=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score);revealState.teams.set(team.id,{visualScore:0,committedScore:0,targetScore:team.score,animationStartScore:0,animationEndScore:0,animationStartTime:0,animationDuration:1,lastEventTime:0,precision:scorePrecision(team.score)});updateTeamVisuals(team.id,0);updateTeamRank(team.id,0,false);if(!revealState.reducedMotion)teamRowElements.get(team.id).fill.style.willChange='transform'});
     const alphabetical=[...data.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));reorderRevealRows(alphabetical);alphabetical.forEach((team,index)=>updateTeamRank(team.id,index,false));clearAllHighlights();revealState.highlightCooldowns.clear();revealState.schedule=revealState.reducedMotion?[]:createRevealSchedule(data.teams,revealState.duration);
     $('revealButton').disabled=true;$('revealButton').textContent='Revealing...';$('revealStatus').hidden=false;announce('Score reveal started.');
