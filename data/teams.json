@@ -2,9 +2,33 @@
   "maximumScore": 100,
   "updatedAt": "2026-07-27T00:00:00.000Z",
   "teams": [
-    { "id": "placeholder-purple", "name": "Placeholder Purple Team", "iconUrl": "icons/lamp.png", "score": 72 },
-    { "id": "placeholder-gold", "name": "Placeholder Gold Team", "iconUrl": "icons/lamp.png", "score": 58 },
-    { "id": "placeholder-silver", "name": "Placeholder Silver Team", "iconUrl": "icons/lamp.png", "score": 41 },
-    { "id": "placeholder-crimson", "name": "Placeholder Crimson Team", "iconUrl": "icons/lamp.png", "score": 25 }
+    {
+      "id": "placeholder-purple",
+      "name": "Placeholder Purple Team",
+      "iconUrl": "icons/lamp.png",
+      "score": 72,
+      "color": "#1d4ed8"
+    },
+    {
+      "id": "placeholder-gold",
+      "name": "Placeholder Gold Team",
+      "iconUrl": "icons/lamp.png",
+      "score": 58,
+      "color": "#b91c1c"
+    },
+    {
+      "id": "placeholder-silver",
+      "name": "Placeholder Silver Team",
+      "iconUrl": "icons/lamp.png",
+      "score": 41,
+      "color": "#047857"
+    },
+    {
+      "id": "placeholder-crimson",
+      "name": "Placeholder Crimson Team",
+      "iconUrl": "icons/lamp.png",
+      "score": 25,
+      "color": "#c2410c"
+    }
   ]
 }
