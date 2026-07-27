@@ -1,0 +1,10 @@
+{
+  "maximumScore": 100,
+  "updatedAt": "2026-07-27T00:00:00.000Z",
+  "teams": [
+    { "id": "placeholder-purple", "name": "Placeholder Purple Team", "iconUrl": "icons/default-team.svg", "score": 72 },
+    { "id": "placeholder-gold", "name": "Placeholder Gold Team", "iconUrl": "icons/default-team.svg", "score": 58 },
+    { "id": "placeholder-silver", "name": "Placeholder Silver Team", "iconUrl": "icons/default-team.svg", "score": 41 },
+    { "id": "placeholder-crimson", "name": "Placeholder Crimson Team", "iconUrl": "icons/default-team.svg", "score": 25 }
+  ]
+}

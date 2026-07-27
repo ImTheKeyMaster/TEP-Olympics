@@ -1,0 +1,13 @@
+{
+  "name": "2026 Grand Chapter Scavenger Hunt",
+  "short_name": "TEP Hunt",
+  "description": "Live standings for the 2026 Grand Chapter Scavenger Hunt",
+  "start_url": "./#leaderboard",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8f5fa",
+  "theme_color": "#35135f",
+  "icons": [
+    {"src":"icons/app-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}

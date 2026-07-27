@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="TEP Hunt">
+  <rect width="512" height="512" rx="112" fill="#35135f"/>
+  <circle cx="256" cy="256" r="194" fill="#f4b942"/>
+  <path d="M256 116 368 158v82c0 76-44 129-112 160-68-31-112-84-112-160v-82z" fill="#5a248f"/>
+  <path d="m256 174 23 47 52 7-38 37 9 52-46-25-46 25 9-52-38-37 52-7z" fill="#fffaf0"/>
+</svg>
