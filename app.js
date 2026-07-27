@@ -134,8 +134,8 @@
       const target=team.score, precision=scorePrecision(target), scale=10**precision, units=Math.round(target*scale);
       if(units<=0)return;
       const normalized=highest?target/highest:0, weight=clamp(1.25-normalized*.65,.6,1.4);
-      const desired=Math.round(clamp((64/Math.max(1,teams.length))*weight,7,18)), count=Math.min(units,desired);
-      const phaseCounts=[Math.round(count*.36),Math.round(count*.42)]; phaseCounts.push(count-1-phaseCounts[0]-phaseCounts[1]);
+      const desired=Math.round(clamp((64/Math.max(1,teams.length))*weight,7,18)), count=Math.min(units,desired), raceCount=count-1;
+      const phaseCounts=[Math.round(raceCount*.36),Math.round(raceCount*.42)]; phaseCounts.push(raceCount-phaseCounts[0]-phaseCounts[1]);
       const raw=Array.from({length:count},(_,i)=>{const phase=i<phaseCounts[0]?0:(i<phaseCounts[0]+phaseCounts[1]?1:2), phaseBias=phase===0?1.45-normalized*.7:(phase===2?.7+normalized*.8:1);return (.55+Math.random()*.9)*phaseBias}), rawTotal=raw.reduce((sum,value)=>sum+value,0);
       let allocated=0; const increments=raw.map((value,i)=>{if(i===count-1)return units-allocated;const remaining=units-allocated-(count-i-1), amount=clamp(Math.round(units*value/rawTotal),1,remaining);allocated+=amount;return amount});
       const profile=Math.floor(Math.random()*3);
@@ -164,6 +164,7 @@
     const progress=clamp((now-state.animationStartTime)/Math.max(1,state.animationDuration),0,1), eased=1-(1-progress)**3;
     state.visualScore=Math.min(state.targetScore,state.animationStartScore+(state.animationEndScore-state.animationStartScore)*eased);
     revealState.displayedScores.set(teamId,state.visualScore); updateTeamVisuals(teamId,state.visualScore,Math.max(1,state.precision));
+    if(state.targetScore>0&&progress===1&&state.visualScore===state.targetScore&&!revealState.settledTeams.has(teamId)){revealState.settledTeams.add(teamId);highlightTeam(teamId,'score-settled',now)}
   }
   function finishReveal(now) {
     data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.committedScore=state.targetScore;revealState.displayedScores.set(team.id,state.targetScore);updateTeamVisuals(team.id,state.targetScore);teamRowElements.get(team.id).fill.style.removeProperty('will-change')});
@@ -191,7 +192,7 @@
     if(revealState.active||!data.teams.length)return; cancelAnimationFrame(revealState.frame);clearAllHighlights();revealState.active=true;revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
     const allZero=data.teams.every(team=>team.score===0);revealState.duration=revealState.reducedMotion?1000:(allZero?1200:10000);revealState.lastRankAt=-Infinity;revealState.nextEvent=0;revealState.settlingAt=0;revealState.displayedScores.clear();revealState.targetScores.clear();revealState.settledTeams.clear();revealState.highlightCooldowns.clear();revealState.teams.clear();
     data.teams.forEach(team=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score);revealState.teams.set(team.id,{visualScore:0,committedScore:0,targetScore:team.score,animationStartScore:0,animationEndScore:0,animationStartTime:0,animationDuration:1,lastEventTime:0,precision:scorePrecision(team.score)});updateTeamVisuals(team.id,0);updateTeamRank(team.id,0,false);if(!revealState.reducedMotion)teamRowElements.get(team.id).fill.style.willChange='transform'});
-    const alphabetical=[...data.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));reorderRevealRows(alphabetical);alphabetical.forEach((team,index)=>updateTeamRank(team.id,index,false));revealState.schedule=revealState.reducedMotion?[]:createRevealSchedule(data.teams,revealState.duration);
+    const alphabetical=[...data.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));reorderRevealRows(alphabetical);alphabetical.forEach((team,index)=>updateTeamRank(team.id,index,false));clearAllHighlights();revealState.highlightCooldowns.clear();revealState.schedule=revealState.reducedMotion?[]:createRevealSchedule(data.teams,revealState.duration);
     $('revealButton').disabled=true;$('revealButton').textContent='Revealing...';$('revealStatus').hidden=false;announce('Score reveal started.');
     requestAnimationFrame(()=>requestAnimationFrame(now=>{if(revealState.active){revealState.startedAt=now;revealState.frame=requestAnimationFrame(revealFrame)}}));
   }
