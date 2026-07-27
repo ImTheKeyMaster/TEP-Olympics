@@ -3,6 +3,14 @@
   const STORAGE_KEY = 'tep-hunt-data-v1';
   const SESSION_KEY = 'tep-hunt-admin';
   const FALLBACK_ICON = 'icons/lamp.png';
+  // Ordered so neighboring assignments are easy to distinguish. Every shade
+  // meets WCAG AA for normal text on the leaderboard's light backgrounds.
+  const TEAM_COLOR_PALETTE = [
+    '#1d4ed8', '#b91c1c', '#047857', '#c2410c',
+    '#7e22ce', '#0f766e', '#a21caf', '#8a5a00',
+    '#be185d', '#1e3a8a', '#166534', '#9a3412',
+    '#0e7490', '#4338ca', '#7f1d1d', '#0f6f72'
+  ];
   const AVAILABLE_TEAM_ICONS = [
     { path: 'icons/lamp.png', label: 'Lamp' },
     { path: 'icons/open-book.png', label: 'Open Book' },
@@ -27,6 +35,11 @@
     finalizing: false
   };
 
+  function nextTeamColor(teams) {
+    const used=new Set(teams.map(team=>team.color).filter(color=>TEAM_COLOR_PALETTE.includes(color)));
+    return TEAM_COLOR_PALETTE.find(color=>!used.has(color)) || '';
+  }
+
   function validateDocument(value) {
     const errors = [];
     if (!value || typeof value !== 'object' || Array.isArray(value)) return { valid: false, errors: ['The JSON root must be an object.'] };
@@ -45,7 +58,12 @@
       else if (names.has(name.toLocaleLowerCase())) errors.push(`Team name “${name}” is duplicated.`); else names.add(name.toLocaleLowerCase());
       if (!Number.isFinite(score) || score < 0) errors.push(`Score for ${name || `team ${index + 1}`} must be zero or greater.`);
       if (iconUrl && !safeIconUrl(iconUrl)) errors.push(`Icon URL for ${name || `team ${index + 1}`} is unsafe.`);
-      cleanTeams.push({ id, name, iconUrl, score });
+      const requestedColor=typeof team.color==='string'?team.color.toLowerCase():'';
+      const color=TEAM_COLOR_PALETTE.includes(requestedColor)&&!cleanTeams.some(item=>item.color===requestedColor)
+        ? requestedColor
+        : nextTeamColor(cleanTeams);
+      if(!color)errors.push(`Team ${index + 1} cannot be assigned a unique color; the ${TEAM_COLOR_PALETTE.length}-team palette is full.`);
+      cleanTeams.push({ id, name, iconUrl, score, color });
     });
     const date = new Date(value.updatedAt);
     if (Number.isNaN(date.getTime())) errors.push('updatedAt must be a valid date.');
@@ -77,7 +95,7 @@
   function roundToPrecision(value,precision) { const scale=10**precision; return Math.round((value+Number.EPSILON)*scale)/scale; }
 
   function createLeaderboardRow(team,index,displayedScore=0) {
-    const li=document.createElement('li'); li.className='team-row'; li.dataset.teamId=team.id;
+    const li=document.createElement('li'); li.className='team-row'; li.dataset.teamId=team.id; li.style.setProperty('--team-color',team.color);
     const content=document.createElement('div'); content.className='team-row-content';
     const rank=document.createElement('span'); rank.className='rank';
     const img=document.createElement('img'); img.className='team-icon'; img.alt=''; img.loading='lazy'; img.referrerPolicy='no-referrer'; img.src=safeIconUrl(team.iconUrl)||FALLBACK_ICON; img.addEventListener('error',()=>{if(!img.src.endsWith(FALLBACK_ICON))img.src=FALLBACK_ICON;},{once:true});
@@ -252,6 +270,9 @@
   }
   function createTeamEditor(team) {
     const card=document.createElement('form'); card.className='team-edit-card'; card.noValidate=true; card.dataset.id=team.id;
+    const identity=document.createElement('div'); identity.className='team-color-identity';
+    const swatch=document.createElement('span'); swatch.className='team-color-swatch'; swatch.style.setProperty('--team-color',team.color); swatch.setAttribute('aria-hidden','true');
+    const identityText=document.createElement('span'); identityText.textContent='Assigned team color'; identity.append(swatch,identityText);
     const grid=document.createElement('div'); grid.className='team-edit-grid';
     const field=(label,type,value,kind) => { const wrap=document.createElement('div'), lab=document.createElement('label'), input=document.createElement('input'), err=document.createElement('p'); lab.textContent=label; input.type=type; input.value=value; input.dataset.field=kind; input.id=`${kind}-${team.id}`; lab.htmlFor=input.id; err.className='field-error'; err.dataset.error=kind; wrap.append(lab,input,err); return {wrap,input}; };
     const name=field('Team name','text',team.name,'name'), score=field('Current score','number',team.score,'score'); score.input.min='0'; score.input.step='any';
@@ -277,7 +298,7 @@
     const scoreRow=document.createElement('div'); scoreRow.className='score-input'; const minus=document.createElement('button'); minus.type='button'; minus.textContent='−1'; minus.setAttribute('aria-label',`Subtract one point from ${team.name}`); const plus=document.createElement('button'); plus.type='button'; plus.textContent='+1'; plus.setAttribute('aria-label',`Add one point to ${team.name}`); score.input.parentNode?.removeChild(score.input); scoreRow.append(minus,score.input,plus); score.wrap.insertBefore(scoreRow,score.wrap.querySelector('.field-error'));
     minus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?Math.max(0,n-1):0}; plus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?n+1:1};
     grid.append(name.wrap,score.wrap); const actions=document.createElement('div'); actions.className='team-actions';
-    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);renderAdmin()}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(grid,iconField,actions); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
+    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);renderAdmin()}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(identity,grid,iconField,actions); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
   }
   function saveTeam(event,id) {
     event.preventDefault(); const form=event.currentTarget, button=form.querySelector('[type=submit]'); if(button.disabled)return; button.disabled=true;
@@ -295,7 +316,14 @@
     if(local) {
       try {
         const result=validateDocument(JSON.parse(local));
-        if(result.valid){data=result.data;return}
+        if(result.valid){
+          data=result.data;
+          // Normalize legacy documents immediately so newly assigned colors are
+          // stored rather than recalculated on every visit.
+          try { localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); }
+          catch(error) { console.warn('Migrated team colors could not be saved:',error); }
+          return;
+        }
         console.warn('Ignoring invalid local data:',result.errors);
       } catch(error) { console.warn('Ignoring malformed local data:',error); }
       try { localStorage.removeItem(STORAGE_KEY); } catch(error) { console.warn('Invalid local data could not be removed:',error); }
@@ -320,7 +348,7 @@
     $('loginForm').onsubmit=e=>{e.preventDefault();if(passwordMatches($('password').value)){sessionStorage.setItem(SESSION_KEY,'yes');$('password').value='';$('loginError').textContent='';route();announce('Signed in.')}else{$('loginError').textContent='Incorrect password. Please try again.';$('password').select()}};
     $('logoutButton').onclick=()=>{sessionStorage.removeItem(SESSION_KEY);location.hash='leaderboard';announce('Logged out.')};
     $('maximumForm').onsubmit=e=>{e.preventDefault();const raw=$('maximumScore').value,n=Number(raw);$('maximumError').textContent='';if(raw.trim()===''||!Number.isFinite(n)||n<=0){$('maximumError').textContent='Enter a number greater than zero.';announce('Maximum score is invalid.',true);return}data.maximumScore=n;persist('Maximum score updated.')};
-    $('addTeam').onclick=()=>{const id=newId();data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
+    $('addTeam').onclick=()=>{const color=nextTeamColor(data.teams);if(!color){announce(`The ${TEAM_COLOR_PALETTE.length}-team color palette is full.`,true);return}const id=newId();data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,color,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
     $('exportJson').onclick=downloadJson;$('copyJson').onclick=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(data,null,2)+'\n');announce('JSON copied to clipboard.')}catch{announce('Clipboard access was unavailable.',true)}};
     $('importJson').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const result=validateDocument(JSON.parse(await file.text()));if(!result.valid)throw new Error(result.errors.join(' '));if(await confirmAction('Import JSON?',`Replace local data with ${result.data.teams.length} teams and a maximum score of ${formatNumber(result.data.maximumScore)}?`)){data=result.data;persist('JSON imported.')}}catch(error){announce(`Import rejected: ${error.message}`,true)}};
     $('resetData').onclick=async()=>{if(await confirmAction('Reset local data?','Discard all edits on this device and reload the published teams.json?'))try{const fresh=await loadPublished();localStorage.removeItem(STORAGE_KEY);data=fresh;renderLeaderboard();renderAdmin();announce('Published data restored.')}catch{announce('Published data could not be loaded.',true)}};
