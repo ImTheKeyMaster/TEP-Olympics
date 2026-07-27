@@ -81,7 +81,7 @@
     const progress=document.createElement('div'); progress.className='progress'; progress.setAttribute('role','progressbar'); progress.setAttribute('aria-valuemin','0'); progress.setAttribute('aria-valuemax',String(data.maximumScore)); progress.style.setProperty('--hue',hashHue(team.id));
     const fill=document.createElement('div'); fill.className='progress-fill'; const score=document.createElement('span'); score.className='score-label'; progress.append(fill,score); main.append(name,progress); content.append(rank,img,main); li.append(content);
     const elements={team,row:li,content,rank,img,progress,fill,label:score}; teamRowElements.set(team.id,elements);
-    updateTeamVisuals(team.id,displayedScore); updateTeamRank(team.id,index); return li;
+    updateTeamVisuals(team.id,displayedScore); updateTeamRank(team.id,index,false); return li;
   }
   function updateTeamRank(teamId,index,showMedals=!revealState.active,animateMedal=false) {
     const {rank}=teamRowElements.get(teamId), medal=showMedals&&index<3; rank.className='rank'+(medal?' medal':'')+(medal&&animateMedal&&!revealState.reducedMotion?' is-medal-arriving':''); rank.textContent=medal?['🥇','🥈','🥉'][index]:String(index+1); rank.setAttribute('aria-label',`Rank ${index+1}`);
@@ -97,7 +97,8 @@
   function renderLeaderboard() {
     const list=$('leaderboard'); list.replaceChildren(); teamRowElements.clear();
     const teams=[...data.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
-    teams.forEach((team,index)=>list.append(createLeaderboardRow(team,index)));
+    revealState.displayedScores.clear(); revealState.targetScores.clear();
+    teams.forEach((team,index)=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score);list.append(createLeaderboardRow(team,index))});
     $('emptyState').hidden=teams.length>0; $('teamCount').textContent=`${teams.length} ${teams.length===1?'team':'teams'}`; $('updatedAt').dateTime=data.updatedAt; $('updatedAt').textContent=formatDate(data.updatedAt);
   }
 
@@ -145,7 +146,7 @@
       const phaseUnits=[Math.max(openingCount,Math.round(units*openingShare)),Math.max(middleCount,Math.round(units*middleShare))];
       if(phaseUnits[0]+phaseUnits[1]>units-phaseCounts[2]-1)phaseUnits[1]=Math.max(middleCount,units-phaseUnits[0]-phaseCounts[2]-1);
       phaseUnits.push(units-phaseUnits[0]-phaseUnits[1]-1);
-      const firstUpdate=clamp(450+Math.random()*1750-normalized*120,450,2200);
+      const firstUpdate=clamp(450+Math.random()*1630+normalized*120,450,2200);
       [[firstUpdate,2900],[3100,6900],[7050,9420]].forEach(([start,end],phase)=>{
         const n=phaseCounts[phase], budget=phaseUnits[phase]; if(!n)return;
         let allocated=0;
@@ -199,7 +200,7 @@
     if(!revealState.active)return;
     if(revealState.settlingAt){if(now>=revealState.settlingAt)completeReveal(now);else revealState.frame=requestAnimationFrame(revealFrame);return}
     const elapsed=now-revealState.startedAt;
-    if(revealState.reducedMotion){const progress=clamp(elapsed/revealState.duration,0,1);data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.targetScore*(1-(1-progress)**3);revealState.displayedScores.set(team.id,state.visualScore);updateTeamVisuals(team.id,state.visualScore,Math.max(1,state.precision))})}
+    if(revealState.reducedMotion){const progress=clamp(elapsed/revealState.duration,0,1);data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.targetScore*(1-(1-progress)**3);const displayed=roundToPrecision(state.visualScore,state.precision);revealState.displayedScores.set(team.id,displayed);updateTeamVisuals(team.id,state.visualScore,state.precision)})}
     else {while(revealState.nextEvent<revealState.schedule.length&&revealState.schedule[revealState.nextEvent].time<=elapsed)beginTeamIncrement(revealState.schedule[revealState.nextEvent++],now);data.teams.forEach(team=>updateTeamScoreAnimation(team.id,now));const rankInterval=elapsed<3000?300:125;if(now-revealState.lastRankAt>=rankInterval){revealState.lastRankAt=now;reorderRevealRows(sortedTeams(team=>revealState.displayedScores.get(team.id)??0),now)}}
     if(elapsed>=revealState.duration&&now>=revealState.movementUntil)finishReveal(now); revealState.frame=requestAnimationFrame(revealFrame);
   }
