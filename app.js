@@ -35,12 +35,9 @@
     finalizing: false
   };
 
-  function nextTeamColor(teams, id = '') {
+  function nextTeamColor(teams) {
     const used=new Set(teams.map(team=>team.color).filter(color=>TEAM_COLOR_PALETTE.includes(color)));
-    const available=TEAM_COLOR_PALETTE.find(color=>!used.has(color));
-    if(available)return available;
-    let hash=0; for(const character of id)hash=(hash*31+character.charCodeAt(0))>>>0;
-    return TEAM_COLOR_PALETTE[hash%TEAM_COLOR_PALETTE.length];
+    return TEAM_COLOR_PALETTE.find(color=>!used.has(color)) || '';
   }
 
   function validateDocument(value) {
@@ -64,7 +61,8 @@
       const requestedColor=typeof team.color==='string'?team.color.toLowerCase():'';
       const color=TEAM_COLOR_PALETTE.includes(requestedColor)&&!cleanTeams.some(item=>item.color===requestedColor)
         ? requestedColor
-        : nextTeamColor(cleanTeams,id);
+        : nextTeamColor(cleanTeams);
+      if(!color)errors.push(`Team ${index + 1} cannot be assigned a unique color; the ${TEAM_COLOR_PALETTE.length}-team palette is full.`);
       cleanTeams.push({ id, name, iconUrl, score, color });
     });
     const date = new Date(value.updatedAt);
@@ -350,7 +348,7 @@
     $('loginForm').onsubmit=e=>{e.preventDefault();if(passwordMatches($('password').value)){sessionStorage.setItem(SESSION_KEY,'yes');$('password').value='';$('loginError').textContent='';route();announce('Signed in.')}else{$('loginError').textContent='Incorrect password. Please try again.';$('password').select()}};
     $('logoutButton').onclick=()=>{sessionStorage.removeItem(SESSION_KEY);location.hash='leaderboard';announce('Logged out.')};
     $('maximumForm').onsubmit=e=>{e.preventDefault();const raw=$('maximumScore').value,n=Number(raw);$('maximumError').textContent='';if(raw.trim()===''||!Number.isFinite(n)||n<=0){$('maximumError').textContent='Enter a number greater than zero.';announce('Maximum score is invalid.',true);return}data.maximumScore=n;persist('Maximum score updated.')};
-    $('addTeam').onclick=()=>{const id=newId(),color=nextTeamColor(data.teams,id);data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,color,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
+    $('addTeam').onclick=()=>{const color=nextTeamColor(data.teams);if(!color){announce(`The ${TEAM_COLOR_PALETTE.length}-team color palette is full.`,true);return}const id=newId();data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,color,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
     $('exportJson').onclick=downloadJson;$('copyJson').onclick=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(data,null,2)+'\n');announce('JSON copied to clipboard.')}catch{announce('Clipboard access was unavailable.',true)}};
     $('importJson').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const result=validateDocument(JSON.parse(await file.text()));if(!result.valid)throw new Error(result.errors.join(' '));if(await confirmAction('Import JSON?',`Replace local data with ${result.data.teams.length} teams and a maximum score of ${formatNumber(result.data.maximumScore)}?`)){data=result.data;persist('JSON imported.')}}catch(error){announce(`Import rejected: ${error.message}`,true)}};
     $('resetData').onclick=async()=>{if(await confirmAction('Reset local data?','Discard all edits on this device and reload the published teams.json?'))try{const fresh=await loadPublished();localStorage.removeItem(STORAGE_KEY);data=fresh;renderLeaderboard();renderAdmin();announce('Published data restored.')}catch{announce('Published data could not be loaded.',true)}};
