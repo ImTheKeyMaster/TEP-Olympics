@@ -20,7 +20,7 @@
     active: false, startedAt: 0, duration: 10000, displayedScores: new Map(),
     targetScores: new Map(), frame: 0, lastRankAt: 0, settledTeams: new Set(),
     highlightTimers: new Map(), highlightCooldowns: new Map(), reducedMotion: false,
-    schedule: [], nextEvent: 0, teams: new Map(), settlingAt: 0
+    schedule: [], nextEvent: 0, teams: new Map(), settlingAt: 0, movementUntil: 0
   };
 
   function validateDocument(value) {
@@ -70,8 +70,9 @@
   function compareTeams(a,b,scoreFor=team=>team.score) { return scoreFor(b)-scoreFor(a) || a.name.localeCompare(b.name,undefined,{sensitivity:'base'}); }
   function sortedTeams(scoreFor) { return [...data.teams].sort((a,b)=>compareTeams(a,b,scoreFor)); }
   function scorePrecision(score) { const text=String(score).toLowerCase(); return text.includes('e-')?Number(text.split('e-')[1]):(text.split('.')[1]||'').length; }
+  function roundToPrecision(value,precision) { const scale=10**precision; return Math.round((value+Number.EPSILON)*scale)/scale; }
 
-  function createLeaderboardRow(team,index,displayedScore=team.score) {
+  function createLeaderboardRow(team,index,displayedScore=0) {
     const li=document.createElement('li'); li.className='team-row'; li.dataset.teamId=team.id;
     const content=document.createElement('div'); content.className='team-row-content';
     const rank=document.createElement('span'); rank.className='rank';
@@ -94,18 +95,20 @@
   }
 
   function renderLeaderboard() {
-    const list=$('leaderboard'); list.replaceChildren(); teamRowElements.clear(); const teams=sortedTeams();
+    const list=$('leaderboard'); list.replaceChildren(); teamRowElements.clear();
+    const teams=[...data.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
     teams.forEach((team,index)=>list.append(createLeaderboardRow(team,index)));
     $('emptyState').hidden=teams.length>0; $('teamCount').textContent=`${teams.length} ${teams.length===1?'team':'teams'}`; $('updatedAt').dateTime=data.updatedAt; $('updatedAt').textContent=formatDate(data.updatedAt);
   }
 
   function reorderRevealRows(teams,now=performance.now()) {
+    if(!revealState.reducedMotion&&now<revealState.movementUntil)return false;
     const list=$('leaderboard'), current=[...list.children].map(row=>row.dataset.teamId), next=teams.map(team=>team.id);
     if(current.every((id,index)=>id===next[index]))return false;
     const oldRanks=new Map(current.map((id,index)=>[id,index])), newRanks=new Map(next.map((id,index)=>[id,index]));
     const oldPositions=new Map(); if(!revealState.reducedMotion)current.forEach(id=>oldPositions.set(id,teamRowElements.get(id).row.getBoundingClientRect().top));
     teams.forEach((team,index)=>{list.append(teamRowElements.get(team.id).row);updateTeamRank(team.id,index,false)});
-    if(!revealState.reducedMotion)teams.forEach(team=>{const row=teamRowElements.get(team.id).row,delta=oldPositions.get(team.id)-row.getBoundingClientRect().top;if(delta)row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.2,.8,.2,1)'})});
+    if(!revealState.reducedMotion){teams.forEach(team=>{const row=teamRowElements.get(team.id).row,delta=oldPositions.get(team.id)-row.getBoundingClientRect().top;if(delta)row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.2,.8,.2,1)'})});revealState.movementUntil=now+190}
     const gains=teams.map(team=>({id:team.id,from:oldRanks.get(team.id),to:newRanks.get(team.id)})).filter(move=>move.from>move.to);
     const prioritized=gains.sort((a,b)=>(a.to===0?-1:0)-(b.to===0?-1:0)||(b.from-b.to)-(a.from-a.to)||a.to-b.to);
     return prioritized.some(move=>highlightTeam(move.id,move.to===0?'first-place':'rank-gain',now));
@@ -134,21 +137,33 @@
       const target=team.score, precision=scorePrecision(target), scale=10**precision, units=Math.round(target*scale);
       if(units<=0)return;
       const normalized=highest?target/highest:0, weight=clamp(1.25-normalized*.65,.6,1.4);
-      const desired=Math.round(clamp((64/Math.max(1,teams.length))*weight,7,18)), count=Math.min(units,desired), raceCount=count-1;
-      const phaseCounts=[Math.round(raceCount*.36),Math.round(raceCount*.42)]; phaseCounts.push(raceCount-phaseCounts[0]-phaseCounts[1]);
-      const raw=Array.from({length:count},(_,i)=>{const phase=i<phaseCounts[0]?0:(i<phaseCounts[0]+phaseCounts[1]?1:2), phaseBias=phase===0?1.45-normalized*.7:(phase===2?.7+normalized*.8:1);return (.55+Math.random()*.9)*phaseBias}), rawTotal=raw.reduce((sum,value)=>sum+value,0);
-      let allocated=0; const increments=raw.map((value,i)=>{if(i===count-1)return units-allocated;const remaining=units-allocated-(count-i-1), amount=clamp(Math.round(units*value/rawTotal),1,remaining);allocated+=amount;return amount});
-      const profile=Math.floor(Math.random()*3);
-      let incrementIndex=0;
-      [[180,2950],[3050,7420],[7550,9420]].forEach(([start,end],phase)=>{
-        const n=Math.max(0,phaseCounts[phase]);
+      const desired=Math.round(clamp((54/Math.max(1,teams.length))*weight,7,16)), count=Math.min(units,desired);
+      const openingCount=Math.min(count-1,units<4?1:(Math.random()<.55?2:1));
+      const middleCount=Math.max(0,Math.round((count-1-openingCount)*.55));
+      const phaseCounts=[openingCount,middleCount,count-1-openingCount-middleCount];
+      const openingShare=.1+Math.random()*.15, middleShare=.38+Math.random()*.12;
+      const phaseUnits=[Math.max(openingCount,Math.round(units*openingShare)),Math.max(middleCount,Math.round(units*middleShare))];
+      if(phaseUnits[0]+phaseUnits[1]>units-phaseCounts[2]-1)phaseUnits[1]=Math.max(middleCount,units-phaseUnits[0]-phaseCounts[2]-1);
+      phaseUnits.push(units-phaseUnits[0]-phaseUnits[1]-1);
+      const firstUpdate=clamp(450+Math.random()*1750-normalized*120,450,2200);
+      [[firstUpdate,2900],[3100,6900],[7050,9420]].forEach(([start,end],phase)=>{
+        const n=phaseCounts[phase], budget=phaseUnits[phase]; if(!n)return;
+        let allocated=0;
         for(let i=0;i<n;i++){
-          let position=(i+1)/(n+1); if(phase===0&&profile===0)position*=.72; if(phase===1&&profile===1)position=.15+position*.7; if(phase===2&&normalized>.7)position=.35+position*.6;
-          const jitter=(Math.random()-.5)*(end-start)/Math.max(4,n*2);
-          events.push({time:clamp(start+position*(end-start)+jitter,start,end),teamId:team.id,amount:increments[incrementIndex++]/scale});
+          const remaining=budget-allocated-(n-i-1), amount=i===n-1?budget-allocated:clamp(Math.round((budget-allocated)/(n-i)*(.7+Math.random()*.6)),1,remaining);
+          allocated+=amount;
+          const position=phase===0&&i===0?0:(i+(phase===0?0:1))/(n+(phase===0?0:1));
+          const time=phase===0&&i===0?start:clamp(start+position*(end-start)+(Math.random()-.5)*120,start,end);
+          events.push({time,teamId:team.id,amount:amount/scale});
         }
       });
-      events.push({time:duration-220+Math.random()*100,teamId:team.id,amount:increments[incrementIndex]/scale,final:true});
+      events.push({time:duration-220+Math.random()*100,teamId:team.id,amount:1/scale,final:true});
+    });
+    events.sort((a,b)=>a.time-b.time);
+    let lastOpening=150; const lastTeamOpening=new Map();
+    events.filter(event=>event.time<3000).forEach(event=>{
+      event.time=Math.max(event.time,lastOpening+250+Math.random()*100,(lastTeamOpening.get(event.teamId)??-Infinity)+500);
+      lastOpening=event.time; lastTeamOpening.set(event.teamId,event.time);
     });
     return events.sort((a,b)=>a.time-b.time);
   }
@@ -163,7 +178,7 @@
     const state=revealState.teams.get(teamId); if(!state)return;
     const progress=clamp((now-state.animationStartTime)/Math.max(1,state.animationDuration),0,1), eased=1-(1-progress)**3;
     state.visualScore=Math.min(state.targetScore,state.animationStartScore+(state.animationEndScore-state.animationStartScore)*eased);
-    revealState.displayedScores.set(teamId,state.visualScore); updateTeamVisuals(teamId,state.visualScore,Math.max(1,state.precision));
+    const displayed=roundToPrecision(state.visualScore,state.precision); revealState.displayedScores.set(teamId,displayed); updateTeamVisuals(teamId,state.visualScore,state.precision);
     if(state.targetScore>0&&progress===1&&state.visualScore===state.targetScore&&!revealState.settledTeams.has(teamId)){revealState.settledTeams.add(teamId);highlightTeam(teamId,'score-settled',now)}
   }
   function finishReveal(now) {
@@ -178,19 +193,19 @@
   }
   function cancelReveal() {
     clearAllHighlights(); cancelAnimationFrame(revealState.frame); revealState.schedule=[]; revealState.teams.clear(); revealState.settlingAt=0;
-    if(!revealState.active)return; revealState.active=false; $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true; renderLeaderboard();
+    revealState.active=false; revealState.displayedScores.clear(); revealState.targetScores.clear(); revealState.movementUntil=0; $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true; renderLeaderboard();
   }
   function revealFrame(now) {
     if(!revealState.active)return;
     if(revealState.settlingAt){if(now>=revealState.settlingAt)completeReveal(now);else revealState.frame=requestAnimationFrame(revealFrame);return}
     const elapsed=now-revealState.startedAt;
     if(revealState.reducedMotion){const progress=clamp(elapsed/revealState.duration,0,1);data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.targetScore*(1-(1-progress)**3);revealState.displayedScores.set(team.id,state.visualScore);updateTeamVisuals(team.id,state.visualScore,Math.max(1,state.precision))})}
-    else {while(revealState.nextEvent<revealState.schedule.length&&revealState.schedule[revealState.nextEvent].time<=elapsed)beginTeamIncrement(revealState.schedule[revealState.nextEvent++],now);data.teams.forEach(team=>updateTeamScoreAnimation(team.id,now));if(now-revealState.lastRankAt>=125){revealState.lastRankAt=now;reorderRevealRows(sortedTeams(team=>revealState.displayedScores.get(team.id)),now)}}
-    if(elapsed>=revealState.duration)finishReveal(now); revealState.frame=requestAnimationFrame(revealFrame);
+    else {while(revealState.nextEvent<revealState.schedule.length&&revealState.schedule[revealState.nextEvent].time<=elapsed)beginTeamIncrement(revealState.schedule[revealState.nextEvent++],now);data.teams.forEach(team=>updateTeamScoreAnimation(team.id,now));const rankInterval=elapsed<3000?300:125;if(now-revealState.lastRankAt>=rankInterval){revealState.lastRankAt=now;reorderRevealRows(sortedTeams(team=>revealState.displayedScores.get(team.id)??0),now)}}
+    if(elapsed>=revealState.duration&&now>=revealState.movementUntil)finishReveal(now); revealState.frame=requestAnimationFrame(revealFrame);
   }
   function startReveal() {
     if(revealState.active||!data.teams.length)return; cancelAnimationFrame(revealState.frame);clearAllHighlights();revealState.active=true;revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const allZero=data.teams.every(team=>team.score===0);revealState.duration=revealState.reducedMotion?1000:(allZero?1200:10000);revealState.lastRankAt=-Infinity;revealState.nextEvent=0;revealState.settlingAt=0;revealState.displayedScores.clear();revealState.targetScores.clear();revealState.settledTeams.clear();revealState.highlightCooldowns.clear();revealState.teams.clear();
+    const allZero=data.teams.every(team=>team.score===0);revealState.duration=revealState.reducedMotion?1000:(allZero?1200:10000);revealState.lastRankAt=-Infinity;revealState.nextEvent=0;revealState.settlingAt=0;revealState.movementUntil=0;revealState.displayedScores.clear();revealState.targetScores.clear();revealState.settledTeams.clear();revealState.highlightCooldowns.clear();revealState.teams.clear();
     data.teams.forEach(team=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score);revealState.teams.set(team.id,{visualScore:0,committedScore:0,targetScore:team.score,animationStartScore:0,animationEndScore:0,animationStartTime:0,animationDuration:1,lastEventTime:0,precision:scorePrecision(team.score)});updateTeamVisuals(team.id,0);updateTeamRank(team.id,0,false);if(!revealState.reducedMotion)teamRowElements.get(team.id).fill.style.willChange='transform'});
     const alphabetical=[...data.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));reorderRevealRows(alphabetical);alphabetical.forEach((team,index)=>updateTeamRank(team.id,index,false));clearAllHighlights();revealState.highlightCooldowns.clear();revealState.schedule=revealState.reducedMotion?[]:createRevealSchedule(data.teams,revealState.duration);
     $('revealButton').disabled=true;$('revealButton').textContent='Revealing...';$('revealStatus').hidden=false;announce('Score reveal started.');
@@ -259,7 +274,7 @@
   function authorized(){return sessionStorage.getItem(SESSION_KEY)==='yes'}
   // Client-side authentication only deters casual access; source inspection can reveal or bypass it.
   function passwordMatches(value){return value === ['T','a','u','b','o','y','s'].join('')}
-  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; if(name!=='leaderboard')cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(authorized()){$('adminScreen').hidden=false;renderAdmin()}else{$('loginScreen').hidden=false;setTimeout(()=>$('password').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
+  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(authorized()){$('adminScreen').hidden=false;renderAdmin()}else{$('loginScreen').hidden=false;setTimeout(()=>$('password').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
   function openMenu(){ $('drawer').classList.add('open');$('drawer').setAttribute('aria-hidden','false');$('menuButton').setAttribute('aria-expanded','true');$('scrim').hidden=false;$('closeMenu').focus() }
   function closeMenu(){ $('drawer').classList.remove('open');$('drawer').setAttribute('aria-hidden','true');$('menuButton').setAttribute('aria-expanded','false');$('scrim').hidden=true }
   function confirmAction(title,message){return new Promise(resolve=>{const dialog=$('confirmDialog');$('dialogTitle').textContent=title;$('dialogMessage').textContent=message;dialog.showModal();dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true})})}
@@ -280,6 +295,6 @@
   }
   function registerServiceWorker(){if(!('serviceWorker'in navigator)||(location.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(location.hostname)))return;navigator.serviceWorker.register('service-worker.js').then(reg=>{if(reg.waiting)showUpdate(reg.waiting);reg.addEventListener('updatefound',()=>{const worker=reg.installing;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(worker)})})}).catch(error=>console.warn('Service worker registration failed:',error));navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}
   function showUpdate(worker){pendingWorker=worker;$('updateNotice').hidden=false}
-  async function init(){bindEvents();await loadData();renderLeaderboard();route();registerServiceWorker()}
+  async function init(){bindEvents();await loadData();renderLeaderboard();route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerServiceWorker()}
   init().catch(error=>{console.error(error);announce('The app encountered an unexpected error.',true)});
 })();
