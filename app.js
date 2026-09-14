@@ -12,8 +12,8 @@
     '#0e7490', '#4338ca', '#7f1d1d', '#0f6f72'
   ];
   const AVAILABLE_TEAM_ICONS = [
-    { path: 'icons/Emeralds.png', label: 'Emeralds' },
     { path: 'icons/lamp.png', label: 'Lamp' },
+    { path: 'icons/Emeralds.png', label: 'Emeralds' },
     { path: 'icons/open-book.png', label: 'Open Book' },
     { path: 'icons/pearls.png', label: 'Pearls' },
     { path: 'icons/scroll.png', label: 'Scroll' },
