@@ -13,7 +13,9 @@
   ];
   const AVAILABLE_TEAM_ICONS = [
     { path: 'icons/lamp.png', label: 'Lamp' },
+    { path: 'icons/Emeralds.png', label: 'Emeralds' },
     { path: 'icons/open-book.png', label: 'Open Book' },
+    { path: 'icons/pearls.png', label: 'Pearls' },
     { path: 'icons/scroll.png', label: 'Scroll' },
     { path: 'icons/star.png', label: 'Star' },
     { path: 'icons/sword.png', label: 'Sword' },
