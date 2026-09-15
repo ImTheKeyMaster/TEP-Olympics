@@ -3,30 +3,37 @@
   "updatedAt": "2026-07-27T00:00:00.000Z",
   "teams": [
     {
-      "id": "placeholder-purple",
-      "name": "Placeholder Purple Team",
+      "id": "placeholder-lamps",
+      "name": "Lamps",
       "iconUrl": "icons/lamp.png",
       "score": 72,
       "color": "#1d4ed8"
     },
     {
-      "id": "placeholder-gold",
-      "name": "Placeholder Gold Team",
-      "iconUrl": "icons/lamp.png",
+      "id": "placeholder-plumes",
+      "name": "Plumes",
+      "iconUrl": "icons/three-plumes.png",
       "score": 58,
       "color": "#b91c1c"
     },
     {
-      "id": "placeholder-silver",
-      "name": "Placeholder Silver Team",
-      "iconUrl": "icons/lamp.png",
+      "id": "placeholder-pearls",
+      "name": "Pearls",
+      "iconUrl": "icons/pearls.png",
       "score": 41,
+      "color": "#c2410c"
+    },
+    {
+      "id": "placeholder-emeralds",
+      "name": "Emeralds",
+      "iconUrl": "icons/Emeralds.png",
+      "score": 25,
       "color": "#047857"
     },
     {
-      "id": "placeholder-crimson",
-      "name": "Placeholder Crimson Team",
-      "iconUrl": "icons/lamp.png",
+      "id": "placeholder-swords",
+      "name": "Swords",
+      "iconUrl": "icons/swords.png",
       "score": 25,
       "color": "#c2410c"
     }
