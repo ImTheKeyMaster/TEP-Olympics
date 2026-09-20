@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  const APP_VERSION = '10';
   const STORAGE_KEY = 'tep-hunt-data-v1';
   const SESSION_KEY = 'tep-hunt-admin';
   const FALLBACK_ICON = 'icons/lamp.png';
@@ -368,8 +369,8 @@
     addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;$('installButton').hidden=false});$('installButton').onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;$('installButton').hidden=true};addEventListener('appinstalled',()=>{$('installButton').hidden=true;announce('App installed.')});
     $('applyUpdate').onclick=()=>{pendingWorker?.postMessage('SKIP_WAITING')};
   }
-  function registerServiceWorker(){if(!('serviceWorker'in navigator)||(location.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(location.hostname)))return;navigator.serviceWorker.register('service-worker.js').then(reg=>{if(reg.waiting)showUpdate(reg.waiting);reg.addEventListener('updatefound',()=>{const worker=reg.installing;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(worker)})})}).catch(error=>console.warn('Service worker registration failed:',error));navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}
+  function registerServiceWorker(){if(!('serviceWorker'in navigator)||(location.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(location.hostname)))return;navigator.serviceWorker.register('service-worker.js',{updateViaCache:'none'}).then(reg=>{if(reg.waiting)showUpdate(reg.waiting);reg.addEventListener('updatefound',()=>{const worker=reg.installing;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(worker)})});reg.update().catch(error=>console.warn('Service worker update check failed:',error))}).catch(error=>console.warn('Service worker registration failed:',error));navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}
   function showUpdate(worker){pendingWorker=worker;$('updateNotice').hidden=false}
-  async function init(){bindEvents();await loadData();renderLeaderboard();route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerServiceWorker()}
+  async function init(){console.log(`[TEP Olympics] App version ${APP_VERSION}`);bindEvents();await loadData();renderLeaderboard();route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerServiceWorker()}
   init().catch(error=>{console.error(error);announce('The app encountered an unexpected error.',true)});
 })();
