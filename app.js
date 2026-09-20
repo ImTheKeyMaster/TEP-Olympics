@@ -27,12 +27,23 @@
   let deferredInstall = null, pendingWorker = null, toastTimer;
   const teamRowElements = new Map();
   const revealState = {
-    active: false, displayedScores: new Map(),
+    status: 'idle', generation: 0, displayedScores: new Map(),
     targetScores: new Map(), frame: 0, settledTeams: new Set(),
     highlightTimers: new Map(), highlightCooldowns: new Map(), reducedMotion: false,
     schedule: [], nextEvent: 0, teams: new Map(), settlingAt: 0, movementUntil: 0,
-    nextEventAt: 0, finalizing: false, rowAnimations: new Set()
+    nextEventAt: 0, finalizing: false, rowAnimations: new Set(), pendingFrames: new Set()
   };
+
+  function updateRevealButton() {
+    const button=$('revealButton'), revealing=revealState.status==='revealing';
+    button.textContent=revealState.status==='complete'?'Reset':revealing?'Revealing...':'Reveal';
+    button.disabled=revealing;
+    button.setAttribute('aria-label',revealState.status==='complete'?'Reset the public leaderboard':revealing?'Score reveal in progress':'Reveal the current team scores');
+  }
+  function queueRevealFrame(callback) {
+    const frame=requestAnimationFrame(now=>{revealState.pendingFrames.delete(frame);callback(now)});
+    revealState.pendingFrames.add(frame); return frame;
+  }
 
   function nextTeamColor(teams) {
     const used=new Set(teams.map(team=>team.color).filter(color=>TEAM_COLOR_PALETTE.includes(color)));
@@ -147,7 +158,8 @@
     if(!ignoreCooldown&&now-(revealState.highlightCooldowns.get(teamId)??-Infinity)<600)return false;
     const content=teamRowElements.get(teamId)?.content; if(!content)return false;
     clearTeamHighlight(teamId); content.classList.add(`is-${event}`); revealState.highlightCooldowns.set(teamId,now);
-    const timer=setTimeout(()=>{content.classList.remove(`is-${event}`);revealState.highlightTimers.delete(teamId)},durations[event]);
+    const generation=revealState.generation;
+    const timer=setTimeout(()=>{if(generation!==revealState.generation)return;content.classList.remove(`is-${event}`);revealState.highlightTimers.delete(teamId)},durations[event]);
     revealState.highlightTimers.set(teamId,timer); return true;
   }
   const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
@@ -215,21 +227,30 @@
     clearAllHighlights(); reorderRevealRows(sortedTeams(team=>revealState.targetScores.get(team.id)),now,true); revealState.settlingAt=Math.max(now,revealState.movementUntil)+30;
   }
   function completeReveal(now) {
+    // The FLIP duration is normally shorter than the settling delay, but wait
+    // for the animations themselves so completion never depends on timing
+    // estimates (for example, when a background tab resumes).
+    if(revealState.rowAnimations.size){revealState.settlingAt=now+16;return}
     const finalTeams=sortedTeams(team=>revealState.targetScores.get(team.id)); finalTeams.forEach((team,index)=>updateTeamMedal(team.id,index,true,true));
     if(!revealState.finalizing){
       if(finalTeams[0])highlightTeam(finalTeams[0].id,'final-winner',now,true);
       revealState.finalizing=true; revealState.settlingAt=now+900; return;
     }
-    revealState.active=false; revealState.settlingAt=0; $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true;
+    revealState.status='complete'; revealState.settlingAt=0; updateRevealButton(); $('revealStatus').hidden=true;
     announce(finalTeams.length?`Score reveal complete. ${finalTeams[0].name} is in first place.`:'Score reveal complete.');
   }
-  function cancelReveal() {
-    clearAllHighlights(); cancelAnimationFrame(revealState.frame); revealState.rowAnimations.forEach(animation=>animation.cancel()); revealState.rowAnimations.clear(); document.querySelectorAll('.team-row').forEach(row=>row.style.removeProperty('transform')); revealState.schedule=[]; revealState.teams.clear(); revealState.settlingAt=0; revealState.nextEventAt=0; revealState.finalizing=false;
-    revealState.active=false; revealState.displayedScores.clear(); revealState.targetScores.clear(); revealState.movementUntil=0; $('revealButton').disabled=false; $('revealButton').textContent='Reveal'; $('revealStatus').hidden=true; renderLeaderboard();
+  function resetRevealPresentation() {
+    revealState.generation++; revealState.status='idle';
+    clearAllHighlights(); cancelAnimationFrame(revealState.frame); revealState.pendingFrames.forEach(frame=>cancelAnimationFrame(frame)); revealState.pendingFrames.clear();
+    revealState.rowAnimations.forEach(animation=>animation.cancel()); revealState.rowAnimations.clear();
+    teamRowElements.forEach(({row,content,fill,medal})=>{row.style.removeProperty('transform');content.style.removeProperty('transform');content.classList.remove(...HIGHLIGHT_CLASSES);fill.style.removeProperty('will-change');medal.classList.remove('is-medal-arriving')});
+    revealState.schedule=[]; revealState.teams.clear(); revealState.settledTeams.clear(); revealState.highlightCooldowns.clear(); revealState.settlingAt=0; revealState.nextEventAt=0; revealState.nextEvent=0; revealState.finalizing=false; revealState.movementUntil=0;
+    revealState.displayedScores.clear(); revealState.targetScores.clear(); $('revealStatus').hidden=true; renderLeaderboard(); updateRevealButton();
   }
-  function revealFrame(now) {
-    if(!revealState.active)return;
-    if(revealState.settlingAt){if(now>=revealState.settlingAt)completeReveal(now);else revealState.frame=requestAnimationFrame(revealFrame);return}
+  function cancelReveal() { resetRevealPresentation() }
+  function revealFrame(now,generation) {
+    if(revealState.status!=='revealing'||generation!==revealState.generation)return;
+    if(revealState.settlingAt){if(now>=revealState.settlingAt)completeReveal(now);else revealState.frame=queueRevealFrame(time=>revealFrame(time,generation));return}
     if(revealState.reducedMotion){
       data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.committedScore=state.targetScore;revealState.displayedScores.set(team.id,state.targetScore);updateTeamVisuals(team.id,state.targetScore,state.precision)});
       finishReveal(now);
@@ -241,16 +262,17 @@
       }
       data.teams.forEach(team=>updateTeamScoreAnimation(team.id,now));
     }
-    if(!revealState.reducedMotion&&revealState.nextEvent>=revealState.schedule.length&&scoreAnimationsFinished(now))finishReveal(now); if(revealState.active)revealState.frame=requestAnimationFrame(revealFrame);
+    if(!revealState.reducedMotion&&revealState.nextEvent>=revealState.schedule.length&&scoreAnimationsFinished(now))finishReveal(now); if(revealState.status==='revealing')revealState.frame=queueRevealFrame(time=>revealFrame(time,generation));
   }
   function startReveal() {
-    if(revealState.active||!data.teams.length)return; cancelAnimationFrame(revealState.frame);clearAllHighlights();revealState.active=true;revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(revealState.status!=='idle'||!data.teams.length)return; cancelAnimationFrame(revealState.frame);clearAllHighlights();revealState.generation++;const generation=revealState.generation;revealState.status='revealing';revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
     revealState.nextEvent=0;revealState.settlingAt=0;revealState.movementUntil=0;revealState.nextEventAt=0;revealState.finalizing=false;revealState.displayedScores.clear();revealState.targetScores.clear();revealState.settledTeams.clear();revealState.highlightCooldowns.clear();revealState.teams.clear();
     data.teams.forEach(team=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score);revealState.teams.set(team.id,{visualScore:0,committedScore:0,targetScore:team.score,animationStartScore:0,animationEndScore:0,animationStartTime:0,animationDuration:1,precision:scorePrecision(team.score)});updateTeamVisuals(team.id,0);updateTeamMedal(team.id,0,false);if(!revealState.reducedMotion)teamRowElements.get(team.id).fill.style.willChange='transform'});
     const alphabetical=[...data.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));reorderRevealRows(alphabetical);clearAllHighlights();revealState.highlightCooldowns.clear();revealState.schedule=revealState.reducedMotion?[]:createRevealSchedule(data.teams);
-    $('revealButton').disabled=true;$('revealButton').textContent='Revealing...';$('revealStatus').hidden=false;announce('Score reveal started.');
-    requestAnimationFrame(()=>requestAnimationFrame(now=>{if(revealState.active){revealState.nextEventAt=revealState.schedule.length?now+revealState.schedule[0].delay:now;revealState.frame=requestAnimationFrame(revealFrame)}}));
+    updateRevealButton();$('revealStatus').hidden=false;announce('Score reveal started.');
+    queueRevealFrame(()=>queueRevealFrame(now=>{if(revealState.status==='revealing'&&generation===revealState.generation){revealState.nextEventAt=revealState.schedule.length?now+revealState.schedule[0].delay:now;revealState.frame=queueRevealFrame(time=>revealFrame(time,generation))}}));
   }
+  function handleRevealButton() { if(revealState.status==='complete')resetRevealPresentation();else if(revealState.status==='idle')startReveal() }
   function renderAdmin() {
     $('maximumScore').value=data.maximumScore; const editor=$('teamEditor'); editor.replaceChildren();
     sortedTeams().forEach(team => editor.append(createTeamEditor(team)));
@@ -328,7 +350,7 @@
   function downloadJson(){const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='teams.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);announce('JSON exported.')}
 
   function bindEvents(){
-    addEventListener('hashchange',route);$('menuButton').onclick=openMenu;$('closeMenu').onclick=closeMenu;$('scrim').onclick=closeMenu;addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('refreshButton').onclick=()=>location.reload();$('revealButton').onclick=startReveal;
+    addEventListener('hashchange',route);$('menuButton').onclick=openMenu;$('closeMenu').onclick=closeMenu;$('scrim').onclick=closeMenu;addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('refreshButton').onclick=()=>location.reload();$('revealButton').onclick=handleRevealButton;
     $('togglePassword').onclick=()=>{const p=$('password'),show=p.type==='password';p.type=show?'text':'password';$('togglePassword').textContent=show?'Hide':'Show';$('togglePassword').setAttribute('aria-label',show?'Hide password':'Show password')};
     $('loginForm').onsubmit=e=>{e.preventDefault();if(passwordMatches($('password').value)){sessionStorage.setItem(SESSION_KEY,'yes');$('password').value='';$('loginError').textContent='';route();announce('Signed in.')}else{$('loginError').textContent='Incorrect password. Please try again.';$('password').select()}};
     $('logoutButton').onclick=()=>{sessionStorage.removeItem(SESSION_KEY);location.hash='leaderboard';announce('Logged out.')};
