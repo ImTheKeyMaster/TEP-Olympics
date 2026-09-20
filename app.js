@@ -31,7 +31,7 @@
     targetScores: new Map(), frame: 0, settledTeams: new Set(),
     highlightTimers: new Map(), highlightCooldowns: new Map(), reducedMotion: false,
     schedule: [], nextEvent: 0, teams: new Map(), settlingAt: 0, movementUntil: 0,
-    nextEventAt: 0, finalizing: false, rowAnimations: new Set(), pendingFrames: new Set()
+    nextEventAt: 0, finalizing: false, rowAnimations: new Set(), rowAnimationTimers: new Set(), pendingFrames: new Set()
   };
 
   function updateRevealButton() {
@@ -141,7 +141,7 @@
     if(current.every((id,index)=>id===next[index]))return {changed:false};
     const oldPositions=new Map(); if(animate&&!revealState.reducedMotion)current.forEach(id=>oldPositions.set(id,teamRowElements.get(id).row.getBoundingClientRect().top));
     teams.forEach(team=>list.append(teamRowElements.get(team.id).row));
-    if(animate&&!revealState.reducedMotion){teams.forEach(team=>{const row=teamRowElements.get(team.id).row,delta=oldPositions.get(team.id)-row.getBoundingClientRect().top;if(delta){const animation=row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.2,.8,.2,1)'});revealState.rowAnimations.add(animation);animation.addEventListener('finish',()=>revealState.rowAnimations.delete(animation),{once:true});animation.addEventListener('cancel',()=>revealState.rowAnimations.delete(animation),{once:true})}});revealState.movementUntil=now+190}
+    if(animate&&!revealState.reducedMotion){teams.forEach(team=>{const row=teamRowElements.get(team.id).row,delta=oldPositions.get(team.id)-row.getBoundingClientRect().top;if(delta){const duration=180,animation=row.animate([{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],{duration,easing:'cubic-bezier(.2,.8,.2,1)'});revealState.rowAnimations.add(animation);let settled=false,fallback=0;const settle=()=>{if(settled)return;settled=true;revealState.rowAnimations.delete(animation);clearTimeout(fallback);revealState.rowAnimationTimers.delete(fallback)};animation.addEventListener('finish',settle,{once:true});animation.addEventListener('cancel',settle,{once:true});/* Some browsers omit Web Animation completion events; never let that stall Reveal. */fallback=setTimeout(settle,duration+50);revealState.rowAnimationTimers.add(fallback)}});revealState.movementUntil=now+190}
     return {changed:true,visualUntil:revealState.movementUntil};
   }
   const HIGHLIGHT_CLASSES=['is-score-settled','is-final-winner'];
@@ -224,25 +224,27 @@
   }
   function finishReveal(now) {
     data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.committedScore=state.targetScore;revealState.displayedScores.set(team.id,state.targetScore);updateTeamVisuals(team.id,state.targetScore);teamRowElements.get(team.id).fill.style.removeProperty('will-change')});
-    clearAllHighlights(); reorderRevealRows(sortedTeams(team=>revealState.targetScores.get(team.id)),now,true); revealState.settlingAt=Math.max(now,revealState.movementUntil)+30;
+    console.log('[Reveal] final scoring complete');
+    clearAllHighlights(); console.log('[Reveal] starting final reorder'); reorderRevealRows(sortedTeams(team=>revealState.targetScores.get(team.id)),now,true); revealState.settlingAt=Math.max(now,revealState.movementUntil)+30;
   }
   function completeReveal(now) {
-    // The FLIP duration is normally shorter than the settling delay, but wait
-    // for the animations themselves so completion never depends on timing
-    // estimates (for example, when a background tab resumes).
     if(revealState.rowAnimations.size){revealState.settlingAt=now+16;return}
-    const finalTeams=sortedTeams(team=>revealState.targetScores.get(team.id)); finalTeams.forEach((team,index)=>updateTeamMedal(team.id,index,true,true));
+    const finalTeams=sortedTeams(team=>revealState.targetScores.get(team.id));
     if(!revealState.finalizing){
+      console.log('[Reveal] final reorder complete');
+      finalTeams.forEach((team,index)=>updateTeamMedal(team.id,index,true,true));
       if(finalTeams[0])highlightTeam(finalTeams[0].id,'final-winner',now,true);
+      console.log('[Reveal] medals applied');
       revealState.finalizing=true; revealState.settlingAt=now+900; return;
     }
-    revealState.status='complete'; revealState.settlingAt=0; updateRevealButton(); $('revealStatus').hidden=true;
+    console.log('[Reveal] setting state complete');
+    revealState.status='complete'; revealState.settlingAt=0; updateRevealButton(); console.log('[Reveal] button updated to Reset'); $('revealStatus').hidden=true;
     announce(finalTeams.length?`Score reveal complete. ${finalTeams[0].name} is in first place.`:'Score reveal complete.');
   }
   function resetRevealPresentation() {
     revealState.generation++; revealState.status='idle';
     clearAllHighlights(); cancelAnimationFrame(revealState.frame); revealState.pendingFrames.forEach(frame=>cancelAnimationFrame(frame)); revealState.pendingFrames.clear();
-    revealState.rowAnimations.forEach(animation=>animation.cancel()); revealState.rowAnimations.clear();
+    revealState.rowAnimations.forEach(animation=>animation.cancel()); revealState.rowAnimations.clear(); revealState.rowAnimationTimers.forEach(timer=>clearTimeout(timer)); revealState.rowAnimationTimers.clear();
     teamRowElements.forEach(({row,content,fill,medal})=>{row.style.removeProperty('transform');content.style.removeProperty('transform');content.classList.remove(...HIGHLIGHT_CLASSES);fill.style.removeProperty('will-change');medal.classList.remove('is-medal-arriving')});
     revealState.schedule=[]; revealState.teams.clear(); revealState.settledTeams.clear(); revealState.highlightCooldowns.clear(); revealState.settlingAt=0; revealState.nextEventAt=0; revealState.nextEvent=0; revealState.finalizing=false; revealState.movementUntil=0;
     revealState.displayedScores.clear(); revealState.targetScores.clear(); $('revealStatus').hidden=true; renderLeaderboard(); updateRevealButton();
