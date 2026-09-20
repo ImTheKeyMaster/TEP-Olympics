@@ -252,7 +252,11 @@
   function cancelReveal() { resetRevealPresentation() }
   function revealFrame(now,generation) {
     if(revealState.status!=='revealing'||generation!==revealState.generation)return;
-    if(revealState.settlingAt){if(now>=revealState.settlingAt)completeReveal(now);else revealState.frame=queueRevealFrame(time=>revealFrame(time,generation));return}
+    if(revealState.settlingAt){
+      if(now>=revealState.settlingAt)completeReveal(now);
+      if(revealState.status==='revealing')revealState.frame=queueRevealFrame(time=>revealFrame(time,generation));
+      return;
+    }
     if(revealState.reducedMotion){
       data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.committedScore=state.targetScore;revealState.displayedScores.set(team.id,state.targetScore);updateTeamVisuals(team.id,state.targetScore,state.precision)});
       finishReveal(now);
