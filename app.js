@@ -27,7 +27,7 @@
   let deferredInstall = null, pendingWorker = null, toastTimer;
   const teamRowElements = new Map();
   const revealState = {
-    status: 'idle', active: false, generation: 0, displayedScores: new Map(),
+    status: 'idle', generation: 0, displayedScores: new Map(),
     targetScores: new Map(), frame: 0, settledTeams: new Set(),
     highlightTimers: new Map(), highlightCooldowns: new Map(), reducedMotion: false,
     schedule: [], nextEvent: 0, teams: new Map(), settlingAt: 0, movementUntil: 0,
@@ -227,16 +227,20 @@
     clearAllHighlights(); reorderRevealRows(sortedTeams(team=>revealState.targetScores.get(team.id)),now,true); revealState.settlingAt=Math.max(now,revealState.movementUntil)+30;
   }
   function completeReveal(now) {
+    // The FLIP duration is normally shorter than the settling delay, but wait
+    // for the animations themselves so completion never depends on timing
+    // estimates (for example, when a background tab resumes).
+    if(revealState.rowAnimations.size){revealState.settlingAt=now+16;return}
     const finalTeams=sortedTeams(team=>revealState.targetScores.get(team.id)); finalTeams.forEach((team,index)=>updateTeamMedal(team.id,index,true,true));
     if(!revealState.finalizing){
       if(finalTeams[0])highlightTeam(finalTeams[0].id,'final-winner',now,true);
       revealState.finalizing=true; revealState.settlingAt=now+900; return;
     }
-    revealState.active=false; revealState.status='complete'; revealState.settlingAt=0; updateRevealButton(); $('revealStatus').hidden=true;
+    revealState.status='complete'; revealState.settlingAt=0; updateRevealButton(); $('revealStatus').hidden=true;
     announce(finalTeams.length?`Score reveal complete. ${finalTeams[0].name} is in first place.`:'Score reveal complete.');
   }
   function resetRevealPresentation() {
-    revealState.generation++; revealState.active=false; revealState.status='idle';
+    revealState.generation++; revealState.status='idle';
     clearAllHighlights(); cancelAnimationFrame(revealState.frame); revealState.pendingFrames.forEach(frame=>cancelAnimationFrame(frame)); revealState.pendingFrames.clear();
     revealState.rowAnimations.forEach(animation=>animation.cancel()); revealState.rowAnimations.clear();
     teamRowElements.forEach(({row,content,fill,medal})=>{row.style.removeProperty('transform');content.style.removeProperty('transform');content.classList.remove(...HIGHLIGHT_CLASSES);fill.style.removeProperty('will-change');medal.classList.remove('is-medal-arriving')});
@@ -245,7 +249,7 @@
   }
   function cancelReveal() { resetRevealPresentation() }
   function revealFrame(now,generation) {
-    if(!revealState.active||revealState.status!=='revealing'||generation!==revealState.generation)return;
+    if(revealState.status!=='revealing'||generation!==revealState.generation)return;
     if(revealState.settlingAt){if(now>=revealState.settlingAt)completeReveal(now);else revealState.frame=queueRevealFrame(time=>revealFrame(time,generation));return}
     if(revealState.reducedMotion){
       data.teams.forEach(team=>{const state=revealState.teams.get(team.id);state.visualScore=state.committedScore=state.targetScore;revealState.displayedScores.set(team.id,state.targetScore);updateTeamVisuals(team.id,state.targetScore,state.precision)});
@@ -258,15 +262,15 @@
       }
       data.teams.forEach(team=>updateTeamScoreAnimation(team.id,now));
     }
-    if(!revealState.reducedMotion&&revealState.nextEvent>=revealState.schedule.length&&scoreAnimationsFinished(now))finishReveal(now); if(revealState.active)revealState.frame=queueRevealFrame(time=>revealFrame(time,generation));
+    if(!revealState.reducedMotion&&revealState.nextEvent>=revealState.schedule.length&&scoreAnimationsFinished(now))finishReveal(now); if(revealState.status==='revealing')revealState.frame=queueRevealFrame(time=>revealFrame(time,generation));
   }
   function startReveal() {
-    if(revealState.status!=='idle'||!data.teams.length)return; cancelAnimationFrame(revealState.frame);clearAllHighlights();revealState.generation++;const generation=revealState.generation;revealState.active=true;revealState.status='revealing';revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(revealState.status!=='idle'||!data.teams.length)return; cancelAnimationFrame(revealState.frame);clearAllHighlights();revealState.generation++;const generation=revealState.generation;revealState.status='revealing';revealState.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
     revealState.nextEvent=0;revealState.settlingAt=0;revealState.movementUntil=0;revealState.nextEventAt=0;revealState.finalizing=false;revealState.displayedScores.clear();revealState.targetScores.clear();revealState.settledTeams.clear();revealState.highlightCooldowns.clear();revealState.teams.clear();
     data.teams.forEach(team=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score);revealState.teams.set(team.id,{visualScore:0,committedScore:0,targetScore:team.score,animationStartScore:0,animationEndScore:0,animationStartTime:0,animationDuration:1,precision:scorePrecision(team.score)});updateTeamVisuals(team.id,0);updateTeamMedal(team.id,0,false);if(!revealState.reducedMotion)teamRowElements.get(team.id).fill.style.willChange='transform'});
     const alphabetical=[...data.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));reorderRevealRows(alphabetical);clearAllHighlights();revealState.highlightCooldowns.clear();revealState.schedule=revealState.reducedMotion?[]:createRevealSchedule(data.teams);
     updateRevealButton();$('revealStatus').hidden=false;announce('Score reveal started.');
-    queueRevealFrame(()=>queueRevealFrame(now=>{if(revealState.active&&revealState.status==='revealing'&&generation===revealState.generation){revealState.nextEventAt=revealState.schedule.length?now+revealState.schedule[0].delay:now;revealState.frame=queueRevealFrame(time=>revealFrame(time,generation))}}));
+    queueRevealFrame(()=>queueRevealFrame(now=>{if(revealState.status==='revealing'&&generation===revealState.generation){revealState.nextEventAt=revealState.schedule.length?now+revealState.schedule[0].delay:now;revealState.frame=queueRevealFrame(time=>revealFrame(time,generation))}}));
   }
   function handleRevealButton() { if(revealState.status==='complete')resetRevealPresentation();else if(revealState.status==='idle')startReveal() }
   function renderAdmin() {
