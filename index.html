@@ -8,7 +8,7 @@
   <title>2026 Grand Chapter Scavenger Hunt</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/app-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=12">
 </head>
 <body>
   <header class="topbar">
@@ -30,7 +30,7 @@
       <div class="hero">
         <p class="eyebrow">Tau Epsilon Phi presents</p>
         <h1 id="mainTitle">2026 Grand Chapter<br> <span class="hero-title__event">Scavenger Hunt</span></h1>
-        <div class="updated">Live standings · Updated <time id="updatedAt">—</time></div>
+        <div class="updated">Live standings · <span id="connectionStatus">Connecting…</span> · Updated <time id="updatedAt">—</time></div>
       </div>
       <div class="leaderboard-card">
         <div class="leaderboard-heading"><h2>Leaderboard</h2><div class="leaderboard-actions"><span id="teamCount"></span><button id="revealButton" class="reveal-button" type="button" aria-label="Reveal the current team scores">Reveal</button></div></div>
@@ -41,23 +41,23 @@
     </section>
 
     <section id="loginScreen" class="screen narrow" hidden aria-labelledby="loginTitle">
-      <div class="panel login-panel"><p class="eyebrow">Restricted access</p><h1 id="loginTitle">Administrator sign in</h1><p>Enter the event password to manage the local leaderboard.</p>
-        <form id="loginForm" novalidate><label for="password">Password</label><div class="password-row"><input id="password" type="password" autocomplete="current-password" required><button id="togglePassword" type="button" class="secondary" aria-label="Show password">Show</button></div><p id="loginError" class="field-error" aria-live="polite"></p><button class="primary full" type="submit">Sign in</button></form>
+      <div class="panel login-panel"><p class="eyebrow">Restricted access</p><h1 id="loginTitle">Administrator sign in</h1><p>Sign in with an administrator account to manage the shared leaderboard.</p>
+        <form id="loginForm" novalidate><label for="email">Email</label><input id="email" type="email" autocomplete="username" required><label for="password">Password</label><div class="password-row"><input id="password" type="password" autocomplete="current-password" required><button id="togglePassword" type="button" class="secondary" aria-label="Show password">Show</button></div><p id="loginError" class="field-error" aria-live="polite"></p><button class="primary full" type="submit">Sign in</button></form>
       </div>
     </section>
 
     <section id="adminScreen" class="screen admin" hidden aria-labelledby="adminTitle">
-      <div class="page-heading"><div><p class="eyebrow">Event controls</p><h1 id="adminTitle">Leaderboard Admin</h1><p>Changes are saved only on this device.</p></div><button id="logoutButton" class="secondary">Log Out</button></div>
+      <div class="page-heading"><div><p class="eyebrow">Event controls</p><h1 id="adminTitle">Leaderboard Admin</h1><p>Changes are saved to the live Firestore leaderboard.</p></div><button id="logoutButton" class="secondary">Log Out</button></div>
       <div class="panel"><h2>Maximum score</h2><form id="maximumForm" class="inline-form" novalidate><div><label for="maximumScore">Points available</label><input id="maximumScore" type="number" min="0.01" step="any" required><p id="maximumError" class="field-error"></p></div><button class="primary" type="submit">Save maximum</button></form></div>
       <div class="panel"><div class="section-heading"><div><h2>Teams</h2><p>Edit competitors and scores.</p></div><button id="addTeam" class="primary">+ Add team</button></div><div id="teamEditor" class="team-editor"></div></div>
-      <div class="panel"><h2>JSON Data</h2><p>Export and commit <code>teams.json</code> to <code>data/teams.json</code> in GitHub to publish changes for everyone. Local edits do not sync to other devices.</p><div class="button-group"><button id="exportJson" class="secondary">Export JSON</button><button id="importJson" class="secondary">Import JSON</button><button id="copyJson" class="secondary">Copy JSON</button><button id="resetData" class="danger">Reset to Published Data</button></div><input id="importFile" type="file" accept="application/json,.json" hidden></div>
+      <div class="panel"><h2>Initial data migration</h2><p>Use this once on an empty database to copy the repository's published teams and settings into Firestore. Existing Firestore data is never overwritten.</p><div class="button-group"><button id="initializeData" class="secondary">Initialize from Published Data</button></div></div>
     </section>
 
-    <section id="aboutScreen" class="screen narrow" hidden aria-labelledby="aboutTitle"><div class="panel about"><p class="eyebrow">About the event</p><h1 id="aboutTitle">A race to the finish</h1><p>Follow the 2026 Grand Chapter Scavenger Hunt as teams compete for the top spot. Scores on this device reflect the latest published data plus any local administrator updates.</p><p>Install this app to keep the leaderboard handy and available offline.</p><a class="primary button-link" href="#leaderboard">View leaderboard</a></div></section>
+    <section id="aboutScreen" class="screen narrow" hidden aria-labelledby="aboutTitle"><div class="panel about"><p class="eyebrow">About the event</p><h1 id="aboutTitle">A race to the finish</h1><p>Follow the 2026 Grand Chapter Scavenger Hunt as teams compete for the top spot. Target scores update live from the shared leaderboard and remain hidden until Reveal.</p><p>Install this app to keep the leaderboard handy and available offline.</p><a class="primary button-link" href="#leaderboard">View leaderboard</a></div></section>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="updateNotice" class="update-notice" hidden><span>A new app version is ready.</span><button id="applyUpdate">Reload</button></div>
   <dialog id="confirmDialog"><form method="dialog"><h2 id="dialogTitle">Confirm action</h2><p id="dialogMessage"></p><div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button value="confirm" class="danger">Confirm</button></div></form></dialog>
-  <script src="app.js?v=10" defer></script>
+  <script type="module" src="app.js?v=12"></script>
 </body>
 </html>

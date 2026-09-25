@@ -1,8 +1,21 @@
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache, persistentMultipleTabManager, runTransaction, serverTimestamp, setDoc, waitForPendingWrites, writeBatch } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+
 (() => {
   'use strict';
-  const APP_VERSION = '10';
-  const STORAGE_KEY = 'tep-hunt-data-v1';
-  const SESSION_KEY = 'tep-hunt-admin';
+  const APP_VERSION = '12';
+  const firebaseConfig = {
+    apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
+    authDomain: 'tep-olympics.firebaseapp.com',
+    projectId: 'tep-olympics',
+    storageBucket: 'tep-olympics.firebasestorage.app',
+    messagingSenderId: '999170332653',
+    appId: '1:999170332653:web:3cebe0f44279b48f5f39e4'
+  };
+  const firebaseApp = initializeApp(firebaseConfig);
+  const auth = getAuth(firebaseApp);
+  const db = initializeFirestore(firebaseApp, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
   const FALLBACK_ICON = 'icons/lamp.png';
   // Ordered so neighboring assignments are easy to distinguish. Every shade
   // meets WCAG AA for normal text on the leaderboard's light backgrounds.
@@ -25,7 +38,9 @@
   ];
   const $ = id => document.getElementById(id);
   let data = { maximumScore: 100, updatedAt: new Date().toISOString(), teams: [] };
-  let deferredInstall = null, pendingWorker = null, toastTimer;
+  let deferredInstall = null, pendingWorker = null, toastTimer, currentUser = null;
+  let teamSnapshot = null, settingsSnapshot = null, unsubscribeTeams = null, unsubscribeSettings = null;
+  let hasServerBackedSnapshot = false, fallbackLoadPromise = null, appliedDataFingerprint = '', adminRefreshPending = false;
   const teamRowElements = new Map();
   const revealState = {
     status: 'idle', generation: 0, displayedScores: new Map(),
@@ -280,13 +295,16 @@
     queueRevealFrame(()=>queueRevealFrame(now=>{if(revealState.status==='revealing'&&generation===revealState.generation){revealState.nextEventAt=revealState.schedule.length?now+revealState.schedule[0].delay:now;revealState.frame=queueRevealFrame(time=>revealFrame(time,generation))}}));
   }
   function handleRevealButton() { if(revealState.status==='complete')resetRevealPresentation();else if(revealState.status==='idle')startReveal() }
-  function renderAdmin() {
+  function adminHasUnsavedTeamEdits() { return Boolean(document.querySelector('#teamEditor .team-edit-card[data-dirty="true"]')); }
+  function renderAdmin(force=false) {
+    if(!force&&adminHasUnsavedTeamEdits()){adminRefreshPending=true;return}
+    adminRefreshPending=false;
     $('maximumScore').value=data.maximumScore; const editor=$('teamEditor'); editor.replaceChildren();
     sortedTeams().forEach(team => editor.append(createTeamEditor(team)));
     if (!data.teams.length) { const p=document.createElement('p'); p.className='empty-state'; p.textContent='No teams. Add one to get started.'; editor.append(p); }
   }
   function createTeamEditor(team) {
-    const card=document.createElement('form'); card.className='team-edit-card'; card.noValidate=true; card.dataset.id=team.id;
+    const card=document.createElement('form'); card.className='team-edit-card'; card.noValidate=true; card.dataset.id=team.id; card.dataset.color=team.color; card.dataset.order=String(data.teams.findIndex(item=>item.id===team.id)); card.dataset.dirty=team._isNew?'true':'false';
     const grid=document.createElement('div'); grid.className='team-edit-grid';
     const field=(label,type,value,kind) => { const wrap=document.createElement('div'), lab=document.createElement('label'), input=document.createElement('input'), err=document.createElement('p'); lab.textContent=label; input.type=type; input.value=value; input.dataset.field=kind; input.id=`${kind}-${team.id}`; lab.htmlFor=input.id; err.className='field-error'; err.dataset.error=kind; wrap.append(lab,input,err); return {wrap,input}; };
     const name=field('Team name','text',team.name,'name'), score=field('Current score','number',team.score,'score'); score.input.min='0'; score.input.step='any';
@@ -310,67 +328,115 @@
     iconGrid.addEventListener('change',event=>{if(event.target.matches('[data-field=builtInIcon]'))customField.input.value=''});
     customField.input.addEventListener('input',()=>{if(customField.input.value)iconGrid.querySelectorAll('input[type=radio]').forEach(radio=>radio.checked=false)});
     const scoreRow=document.createElement('div'); scoreRow.className='score-input'; const minus=document.createElement('button'); minus.type='button'; minus.textContent='−1'; minus.setAttribute('aria-label',`Subtract one point from ${team.name}`); const plus=document.createElement('button'); plus.type='button'; plus.textContent='+1'; plus.setAttribute('aria-label',`Add one point to ${team.name}`); score.input.parentNode?.removeChild(score.input); scoreRow.append(minus,score.input,plus); score.wrap.insertBefore(scoreRow,score.wrap.querySelector('.field-error'));
-    minus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?Math.max(0,n-1):0}; plus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?n+1:1};
+    minus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?Math.max(0,n-1):0;card.dataset.dirty='true'}; plus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?n+1:1;card.dataset.dirty='true'};
     grid.append(name.wrap,score.wrap); const actions=document.createElement('div'); actions.className='team-actions';
-    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);renderAdmin()}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(grid,iconField,actions); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
+    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);card.dataset.dirty='false';renderAdmin(true)}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team,card); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(grid,iconField,actions); card.addEventListener('input',()=>card.dataset.dirty='true'); card.addEventListener('change',()=>card.dataset.dirty='true'); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
   }
-  function saveTeam(event,id) {
+  async function saveTeam(event,id) {
     event.preventDefault(); const form=event.currentTarget, button=form.querySelector('[type=submit]'); if(button.disabled)return; button.disabled=true;
     form.querySelectorAll('.field-error').forEach(e=>e.textContent=''); const name=form.querySelector('[data-field=name]').value.trim(), selectedIcon=form.querySelector('[data-field=builtInIcon]:checked'), customIcon=form.querySelector('[data-field=iconUrl]').value.trim(), iconUrl=normalizeIconUrl(selectedIcon?.value || customIcon), raw=form.querySelector('[data-field=score]').value, score=Number(raw); let valid=true;
     const error=(field,msg)=>{form.querySelector(`[data-error=${field}]`).textContent=msg;valid=false}; if(!name)error('name','A team name is required.'); if(data.teams.some(t=>t.id!==id&&t.name.toLowerCase()===name.toLowerCase()))error('name','Team names must be unique.'); if(raw.trim()===''||!Number.isFinite(score)||score<0)error('score','Enter a score of zero or greater.'); if(iconUrl&&!safeIconUrl(iconUrl))error('iconUrl','Use an http(s) URL or safe relative path.');
-    if(!valid){announce('Please correct the highlighted fields.',true);button.disabled=false;return} const team=data.teams.find(t=>t.id===id); Object.assign(team,{name,iconUrl,score}); delete team._isNew; persist('Team saved.'); button.disabled=false;
+    if(!valid){announce('Please correct the highlighted fields.',true);button.disabled=false;return}
+    const saved={name,icon:iconUrl,score,color:form.dataset.color,order:Number(form.dataset.order),updatedAt:serverTimestamp()};
+    try { const succeeded=await commitWrite(()=>{const batch=writeBatch(db);batch.set(doc(db,'teams',id),saved);batch.set(doc(db,'settings','leaderboard'),{updatedAt:serverTimestamp()},{merge:true});return batch.commit()},'Team saved.'); if(succeeded){form.dataset.dirty='false';renderAdmin()} }
+    finally { button.disabled=false; }
   }
-  async function removeTeam(team) { if(await confirmAction('Remove team?',`Remove ${team.name} from this device's leaderboard?`)){data.teams=data.teams.filter(t=>t.id!==team.id);persist('Team removed.')} }
-  function persist(message) { data.updatedAt=new Date().toISOString(); try { localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); } catch(error) { console.warn('Local data could not be saved:',error); announce('Changes are visible, but could not be saved on this device.',true); renderLeaderboard(); renderAdmin(); return; } renderLeaderboard(); renderAdmin(); announce(message); }
+  async function removeTeam(team,form) {
+    if(await confirmAction('Remove team?',`Remove ${team.name} from the shared leaderboard?`)){const succeeded=await commitWrite(()=>{const batch=writeBatch(db);batch.delete(doc(db,'teams',team.id));batch.set(doc(db,'settings','leaderboard'),{updatedAt:serverTimestamp()},{merge:true});return batch.commit()},'Team removed.');if(succeeded){form.dataset.dirty='false';form.remove();renderAdmin()}}
+  }
+  function friendlyFirebaseError(error, action='save changes') {
+    console.warn(`Firebase could not ${action}:`,error);
+    if(error?.code==='permission-denied'||error?.code==='firestore/permission-denied')return 'Permission denied. Sign in with an authorized administrator account.';
+    if(error?.code==='auth/invalid-credential'||error?.code==='auth/wrong-password'||error?.code==='auth/user-not-found')return 'The email or password is incorrect.';
+    if(error?.code==='auth/invalid-email')return 'Enter a valid email address.';
+    if(!navigator.onLine||error?.code==='unavailable'||error?.code==='firestore/unavailable')return 'You appear to be offline. Reconnect before saving changes.';
+    return `Unable to ${action}. Please try again.`;
+  }
+  async function commitWrite(operation,message) {
+    if(!currentUser){announce('Your session has ended. Sign in again.',true);route();return false}
+    if(!navigator.onLine){announce('You are offline. No changes were submitted.',true);return false}
+    try { await operation(); await waitForPendingWrites(db); announce(message); return true; }
+    catch(error){announce(friendlyFirebaseError(error),true);return false}
+  }
   function newId(){return crypto.randomUUID?.() || `team-${Date.now()}-${Math.random().toString(36).slice(2,9)}`}
   async function loadPublished() { const response=await fetch('data/teams.json',{cache:'no-cache'}); if(!response.ok)throw new Error('Published data unavailable'); const result=validateDocument(await response.json()); if(!result.valid)throw new Error(result.errors.join(' ')); return result.data; }
-  async function loadData() {
-    let local = null;
-    try { local=localStorage.getItem(STORAGE_KEY); } catch(error) { console.warn('Local data is unavailable:',error); }
-    if(local) {
-      try {
-        const result=validateDocument(JSON.parse(local));
-        if(result.valid){
-          data=result.data;
-          // Normalize legacy documents immediately so newly assigned colors are
-          // stored rather than recalculated on every visit.
-          try { localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); }
-          catch(error) { console.warn('Migrated team colors could not be saved:',error); }
-          return;
-        }
-        console.warn('Ignoring invalid local data:',result.errors);
-      } catch(error) { console.warn('Ignoring malformed local data:',error); }
-      try { localStorage.removeItem(STORAGE_KEY); } catch(error) { console.warn('Invalid local data could not be removed:',error); }
-      announce('Saved data was invalid; using published data.',true);
-    }
-    try { data=await loadPublished(); }
-    catch(error){console.warn(error);data={maximumScore:100,updatedAt:new Date().toISOString(),teams:[]};announce('Published data could not be loaded. Safe defaults are in use.',true)}
+  function snapshotDate(value) { return value?.toDate?.().toISOString?.() || (typeof value==='string'?value:new Date().toISOString()); }
+  function dataFingerprint(value) { return JSON.stringify({maximumScore:value.maximumScore,teams:value.teams}); }
+  function firestoreSnapshotsAreEmptyCache() {
+    return !hasServerBackedSnapshot&&teamSnapshot?.metadata.fromCache&&settingsSnapshot?.metadata.fromCache&&!teamSnapshot.size&&!settingsSnapshot.exists();
+  }
+  async function showPublishedFallback() {
+    if(fallbackLoadPromise)return fallbackLoadPromise;
+    fallbackLoadPromise=(async()=>{try{const published=await loadPublished();if(!firestoreSnapshotsAreEmptyCache())return;data=published;appliedDataFingerprint=dataFingerprint(published);if(revealState.status!=='idle')cancelReveal();else renderLeaderboard();if(currentUser&&location.hash==='#admin')renderAdmin();$('connectionStatus').textContent='Offline fallback'}catch(error){console.warn('Published fallback failed:',error)}})();
+    try{await fallbackLoadPromise}finally{fallbackLoadPromise=null}
+  }
+  function applyRealtimeData() {
+    if(!teamSnapshot||!settingsSnapshot)return;
+    if(!teamSnapshot.metadata.fromCache||!settingsSnapshot.metadata.fromCache)hasServerBackedSnapshot=true;
+    if(firestoreSnapshotsAreEmptyCache()){showPublishedFallback();return}
+    const settings=settingsSnapshot.exists()?settingsSnapshot.data():{};
+    const teams=teamSnapshot.docs.map((item,index)=>{const value=item.data();return {id:item.id,name:value.name,iconUrl:value.icon||'',score:value.score,color:value.color,order:Number.isFinite(value.order)?value.order:index}}).sort((a,b)=>a.order-b.order);
+    const result=validateDocument({maximumScore:settings.maxScore??100,updatedAt:snapshotDate(settings.updatedAt),teams});
+    if(!result.valid){console.warn('Ignoring invalid Firestore leaderboard:',result.errors);announce('Live leaderboard data is invalid. An administrator must correct it.',true);return}
+    const fromCache=teamSnapshot.metadata.fromCache||settingsSnapshot.metadata.fromCache;
+    $('connectionStatus').textContent=fromCache?'Offline cache':'Live';
+    const fingerprint=dataFingerprint(result.data);
+    if(fingerprint===appliedDataFingerprint)return;
+    appliedDataFingerprint=fingerprint;data=result.data;
+    if(revealState.status!=='idle')cancelReveal();else renderLeaderboard();
+    if(currentUser&&location.hash==='#admin')renderAdmin();
+  }
+  function listenForLeaderboard() {
+    unsubscribeTeams=onSnapshot(collection(db,'teams'),{includeMetadataChanges:true},snapshot=>{teamSnapshot=snapshot;applyRealtimeData()},error=>handleReadError(error));
+    unsubscribeSettings=onSnapshot(doc(db,'settings','leaderboard'),{includeMetadataChanges:true},snapshot=>{settingsSnapshot=snapshot;applyRealtimeData()},error=>handleReadError(error));
+  }
+  async function handleReadError(error) {
+    console.warn('Firestore listener failed:',error); announce('The live leaderboard is unavailable. Showing the last available data.',true);
+    if(!data.teams.length)try{data=await loadPublished();renderLeaderboard()}catch(loadError){console.warn('Fallback data failed:',loadError)}
+  }
+  async function initializePublishedData() {
+    if(!currentUser)return;
+    if(!navigator.onLine){announce('Reconnect before initializing Firestore.',true);return}
+    let published;
+    try { published=await loadPublished(); }
+    catch(error){announce('Published migration data could not be loaded.',true);return}
+    if(!await confirmAction('Initialize Firestore?',`Copy ${published.teams.length} published teams and the maximum score into an empty database?`))return;
+    const button=$('initializeData');button.disabled=true;
+    try {
+      await runTransaction(db,async transaction=>{
+        const settingsRef=doc(db,'settings','leaderboard');
+        const refs=published.teams.map(team=>doc(db,'teams',team.id));
+        const existing=await Promise.all([transaction.get(settingsRef),...refs.map(ref=>transaction.get(ref))]);
+        if(existing.some(item=>item.exists()))throw Object.assign(new Error('already initialized'),{code:'already-exists'});
+        transaction.set(settingsRef,{maxScore:published.maximumScore,updatedAt:serverTimestamp(),schemaVersion:1});
+        published.teams.forEach((team,order)=>transaction.set(refs[order],{name:team.name,icon:team.iconUrl,score:team.score,color:team.color,order,updatedAt:serverTimestamp()}));
+      });
+      await waitForPendingWrites(db);announce('Firestore initialized from published data.');
+    } catch(error) {
+      if(error?.code==='already-exists')announce('Initialization stopped: Firestore already contains leaderboard data.',true);
+      else announce(friendlyFirebaseError(error,'initialize Firestore'),true);
+    } finally {button.disabled=false}
   }
 
-  function authorized(){return sessionStorage.getItem(SESSION_KEY)==='yes'}
-  // Client-side authentication only deters casual access; source inspection can reveal or bypass it.
-  function passwordMatches(value){return value === ['T','a','u','b','o','y','s'].join('')}
-  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(authorized()){$('adminScreen').hidden=false;renderAdmin()}else{$('loginScreen').hidden=false;setTimeout(()=>$('password').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
+  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
   function openMenu(){ $('drawer').classList.add('open');$('drawer').setAttribute('aria-hidden','false');$('menuButton').setAttribute('aria-expanded','true');$('scrim').hidden=false;$('closeMenu').focus() }
   function closeMenu(){ $('drawer').classList.remove('open');$('drawer').setAttribute('aria-hidden','true');$('menuButton').setAttribute('aria-expanded','false');$('scrim').hidden=true }
   function confirmAction(title,message){return new Promise(resolve=>{const dialog=$('confirmDialog');$('dialogTitle').textContent=title;$('dialogMessage').textContent=message;dialog.showModal();dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true})})}
-  function downloadJson(){const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='teams.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);announce('JSON exported.')}
 
   function bindEvents(){
     addEventListener('hashchange',route);$('menuButton').onclick=openMenu;$('closeMenu').onclick=closeMenu;$('scrim').onclick=closeMenu;addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('refreshButton').onclick=()=>location.reload();$('revealButton').onclick=handleRevealButton;
     $('togglePassword').onclick=()=>{const p=$('password'),show=p.type==='password';p.type=show?'text':'password';$('togglePassword').textContent=show?'Hide':'Show';$('togglePassword').setAttribute('aria-label',show?'Hide password':'Show password')};
-    $('loginForm').onsubmit=e=>{e.preventDefault();if(passwordMatches($('password').value)){sessionStorage.setItem(SESSION_KEY,'yes');$('password').value='';$('loginError').textContent='';route();announce('Signed in.')}else{$('loginError').textContent='Incorrect password. Please try again.';$('password').select()}};
-    $('logoutButton').onclick=()=>{sessionStorage.removeItem(SESSION_KEY);location.hash='leaderboard';announce('Logged out.')};
-    $('maximumForm').onsubmit=e=>{e.preventDefault();const raw=$('maximumScore').value,n=Number(raw);$('maximumError').textContent='';if(raw.trim()===''||!Number.isFinite(n)||n<=0){$('maximumError').textContent='Enter a number greater than zero.';announce('Maximum score is invalid.',true);return}data.maximumScore=n;persist('Maximum score updated.')};
+    $('loginForm').onsubmit=async e=>{e.preventDefault();const button=e.currentTarget.querySelector('[type=submit]');button.disabled=true;$('loginError').textContent='';try{await signInWithEmailAndPassword(auth,$('email').value.trim(),$('password').value);$('password').value='';announce('Signed in.')}catch(error){$('loginError').textContent=friendlyFirebaseError(error,'sign in');$('password').select()}finally{button.disabled=false}};
+    $('logoutButton').onclick=async()=>{try{await signOut(auth);location.hash='leaderboard';announce('Logged out.')}catch(error){announce(friendlyFirebaseError(error,'log out'),true)}};
+    $('maximumForm').onsubmit=async e=>{e.preventDefault();const raw=$('maximumScore').value,n=Number(raw);$('maximumError').textContent='';if(raw.trim()===''||!Number.isFinite(n)||n<=0){$('maximumError').textContent='Enter a number greater than zero.';announce('Maximum score is invalid.',true);return}await commitWrite(()=>setDoc(doc(db,'settings','leaderboard'),{maxScore:n,updatedAt:serverTimestamp(),schemaVersion:1},{merge:true}),'Maximum score updated.')};
     $('addTeam').onclick=()=>{const color=nextTeamColor(data.teams);if(!color){announce(`The ${TEAM_COLOR_PALETTE.length}-team color palette is full.`,true);return}const id=newId();data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,color,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
-    $('exportJson').onclick=downloadJson;$('copyJson').onclick=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(data,null,2)+'\n');announce('JSON copied to clipboard.')}catch{announce('Clipboard access was unavailable.',true)}};
-    $('importJson').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const result=validateDocument(JSON.parse(await file.text()));if(!result.valid)throw new Error(result.errors.join(' '));if(await confirmAction('Import JSON?',`Replace local data with ${result.data.teams.length} teams and a maximum score of ${formatNumber(result.data.maximumScore)}?`)){data=result.data;persist('JSON imported.')}}catch(error){announce(`Import rejected: ${error.message}`,true)}};
-    $('resetData').onclick=async()=>{if(await confirmAction('Reset local data?','Discard all edits on this device and reload the published teams.json?'))try{const fresh=await loadPublished();localStorage.removeItem(STORAGE_KEY);data=fresh;renderLeaderboard();renderAdmin();announce('Published data restored.')}catch{announce('Published data could not be loaded.',true)}};
+    $('initializeData').onclick=initializePublishedData;
+    addEventListener('online',()=>announce('Back online. Live updates resumed.'));addEventListener('offline',()=>announce('You are offline. Showing cached leaderboard data.',true));
     addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;$('installButton').hidden=false});$('installButton').onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;$('installButton').hidden=true};addEventListener('appinstalled',()=>{$('installButton').hidden=true;announce('App installed.')});
     $('applyUpdate').onclick=()=>{pendingWorker?.postMessage('SKIP_WAITING')};
   }
   function registerServiceWorker(){if(!('serviceWorker'in navigator)||(location.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(location.hostname)))return;navigator.serviceWorker.register('service-worker.js',{updateViaCache:'none'}).then(reg=>{if(reg.waiting)showUpdate(reg.waiting);reg.addEventListener('updatefound',()=>{const worker=reg.installing;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(worker)})});reg.update().catch(error=>console.warn('Service worker update check failed:',error))}).catch(error=>console.warn('Service worker registration failed:',error));navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}
   function showUpdate(worker){pendingWorker=worker;$('updateNotice').hidden=false}
-  async function init(){console.log(`[TEP Olympics] App version ${APP_VERSION}`);bindEvents();await loadData();renderLeaderboard();route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerServiceWorker()}
+  async function init(){console.log(`[TEP Olympics] App version ${APP_VERSION}`);bindEvents();renderLeaderboard();listenForLeaderboard();onAuthStateChanged(auth,user=>{currentUser=user;route()});route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerServiceWorker()}
   init().catch(error=>{console.error(error);announce('The app encountered an unexpected error.',true)});
 })();
