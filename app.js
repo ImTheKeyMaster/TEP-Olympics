@@ -4,7 +4,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
 
 (() => {
   'use strict';
-  const APP_VERSION = '11';
+  const APP_VERSION = '12';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -40,6 +40,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
   let data = { maximumScore: 100, updatedAt: new Date().toISOString(), teams: [] };
   let deferredInstall = null, pendingWorker = null, toastTimer, currentUser = null;
   let teamSnapshot = null, settingsSnapshot = null, unsubscribeTeams = null, unsubscribeSettings = null;
+  let hasServerBackedSnapshot = false, fallbackLoadPromise = null, appliedDataFingerprint = '', adminRefreshPending = false;
   const teamRowElements = new Map();
   const revealState = {
     status: 'idle', generation: 0, displayedScores: new Map(),
@@ -294,13 +295,16 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
     queueRevealFrame(()=>queueRevealFrame(now=>{if(revealState.status==='revealing'&&generation===revealState.generation){revealState.nextEventAt=revealState.schedule.length?now+revealState.schedule[0].delay:now;revealState.frame=queueRevealFrame(time=>revealFrame(time,generation))}}));
   }
   function handleRevealButton() { if(revealState.status==='complete')resetRevealPresentation();else if(revealState.status==='idle')startReveal() }
-  function renderAdmin() {
+  function adminHasUnsavedTeamEdits() { return Boolean(document.querySelector('#teamEditor .team-edit-card[data-dirty="true"]')); }
+  function renderAdmin(force=false) {
+    if(!force&&adminHasUnsavedTeamEdits()){adminRefreshPending=true;return}
+    adminRefreshPending=false;
     $('maximumScore').value=data.maximumScore; const editor=$('teamEditor'); editor.replaceChildren();
     sortedTeams().forEach(team => editor.append(createTeamEditor(team)));
     if (!data.teams.length) { const p=document.createElement('p'); p.className='empty-state'; p.textContent='No teams. Add one to get started.'; editor.append(p); }
   }
   function createTeamEditor(team) {
-    const card=document.createElement('form'); card.className='team-edit-card'; card.noValidate=true; card.dataset.id=team.id;
+    const card=document.createElement('form'); card.className='team-edit-card'; card.noValidate=true; card.dataset.id=team.id; card.dataset.color=team.color; card.dataset.order=String(data.teams.findIndex(item=>item.id===team.id)); card.dataset.dirty=team._isNew?'true':'false';
     const grid=document.createElement('div'); grid.className='team-edit-grid';
     const field=(label,type,value,kind) => { const wrap=document.createElement('div'), lab=document.createElement('label'), input=document.createElement('input'), err=document.createElement('p'); lab.textContent=label; input.type=type; input.value=value; input.dataset.field=kind; input.id=`${kind}-${team.id}`; lab.htmlFor=input.id; err.className='field-error'; err.dataset.error=kind; wrap.append(lab,input,err); return {wrap,input}; };
     const name=field('Team name','text',team.name,'name'), score=field('Current score','number',team.score,'score'); score.input.min='0'; score.input.step='any';
@@ -324,21 +328,21 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
     iconGrid.addEventListener('change',event=>{if(event.target.matches('[data-field=builtInIcon]'))customField.input.value=''});
     customField.input.addEventListener('input',()=>{if(customField.input.value)iconGrid.querySelectorAll('input[type=radio]').forEach(radio=>radio.checked=false)});
     const scoreRow=document.createElement('div'); scoreRow.className='score-input'; const minus=document.createElement('button'); minus.type='button'; minus.textContent='−1'; minus.setAttribute('aria-label',`Subtract one point from ${team.name}`); const plus=document.createElement('button'); plus.type='button'; plus.textContent='+1'; plus.setAttribute('aria-label',`Add one point to ${team.name}`); score.input.parentNode?.removeChild(score.input); scoreRow.append(minus,score.input,plus); score.wrap.insertBefore(scoreRow,score.wrap.querySelector('.field-error'));
-    minus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?Math.max(0,n-1):0}; plus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?n+1:1};
+    minus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?Math.max(0,n-1):0;card.dataset.dirty='true'}; plus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?n+1:1;card.dataset.dirty='true'};
     grid.append(name.wrap,score.wrap); const actions=document.createElement('div'); actions.className='team-actions';
-    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);renderAdmin()}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(grid,iconField,actions); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
+    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);card.dataset.dirty='false';renderAdmin(true)}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team,card); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(grid,iconField,actions); card.addEventListener('input',()=>card.dataset.dirty='true'); card.addEventListener('change',()=>card.dataset.dirty='true'); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
   }
   async function saveTeam(event,id) {
     event.preventDefault(); const form=event.currentTarget, button=form.querySelector('[type=submit]'); if(button.disabled)return; button.disabled=true;
     form.querySelectorAll('.field-error').forEach(e=>e.textContent=''); const name=form.querySelector('[data-field=name]').value.trim(), selectedIcon=form.querySelector('[data-field=builtInIcon]:checked'), customIcon=form.querySelector('[data-field=iconUrl]').value.trim(), iconUrl=normalizeIconUrl(selectedIcon?.value || customIcon), raw=form.querySelector('[data-field=score]').value, score=Number(raw); let valid=true;
     const error=(field,msg)=>{form.querySelector(`[data-error=${field}]`).textContent=msg;valid=false}; if(!name)error('name','A team name is required.'); if(data.teams.some(t=>t.id!==id&&t.name.toLowerCase()===name.toLowerCase()))error('name','Team names must be unique.'); if(raw.trim()===''||!Number.isFinite(score)||score<0)error('score','Enter a score of zero or greater.'); if(iconUrl&&!safeIconUrl(iconUrl))error('iconUrl','Use an http(s) URL or safe relative path.');
     if(!valid){announce('Please correct the highlighted fields.',true);button.disabled=false;return}
-    const team=data.teams.find(t=>t.id===id); const saved={name,icon:iconUrl,score,color:team.color,order:data.teams.findIndex(t=>t.id===id),updatedAt:serverTimestamp()};
-    try { await commitWrite(()=>{const batch=writeBatch(db);batch.set(doc(db,'teams',id),saved);batch.set(doc(db,'settings','leaderboard'),{updatedAt:serverTimestamp()},{merge:true});return batch.commit()},'Team saved.'); }
+    const saved={name,icon:iconUrl,score,color:form.dataset.color,order:Number(form.dataset.order),updatedAt:serverTimestamp()};
+    try { const succeeded=await commitWrite(()=>{const batch=writeBatch(db);batch.set(doc(db,'teams',id),saved);batch.set(doc(db,'settings','leaderboard'),{updatedAt:serverTimestamp()},{merge:true});return batch.commit()},'Team saved.'); if(succeeded){form.dataset.dirty='false';renderAdmin()} }
     finally { button.disabled=false; }
   }
-  async function removeTeam(team) {
-    if(await confirmAction('Remove team?',`Remove ${team.name} from the shared leaderboard?`)) await commitWrite(()=>{const batch=writeBatch(db);batch.delete(doc(db,'teams',team.id));batch.set(doc(db,'settings','leaderboard'),{updatedAt:serverTimestamp()},{merge:true});return batch.commit()},'Team removed.');
+  async function removeTeam(team,form) {
+    if(await confirmAction('Remove team?',`Remove ${team.name} from the shared leaderboard?`)){const succeeded=await commitWrite(()=>{const batch=writeBatch(db);batch.delete(doc(db,'teams',team.id));batch.set(doc(db,'settings','leaderboard'),{updatedAt:serverTimestamp()},{merge:true});return batch.commit()},'Team removed.');if(succeeded){form.dataset.dirty='false';form.remove();renderAdmin()}}
   }
   function friendlyFirebaseError(error, action='save changes') {
     console.warn(`Firebase could not ${action}:`,error);
@@ -357,17 +361,30 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
   function newId(){return crypto.randomUUID?.() || `team-${Date.now()}-${Math.random().toString(36).slice(2,9)}`}
   async function loadPublished() { const response=await fetch('data/teams.json',{cache:'no-cache'}); if(!response.ok)throw new Error('Published data unavailable'); const result=validateDocument(await response.json()); if(!result.valid)throw new Error(result.errors.join(' ')); return result.data; }
   function snapshotDate(value) { return value?.toDate?.().toISOString?.() || (typeof value==='string'?value:new Date().toISOString()); }
+  function dataFingerprint(value) { return JSON.stringify({maximumScore:value.maximumScore,teams:value.teams}); }
+  function firestoreSnapshotsAreEmptyCache() {
+    return !hasServerBackedSnapshot&&teamSnapshot?.metadata.fromCache&&settingsSnapshot?.metadata.fromCache&&!teamSnapshot.size&&!settingsSnapshot.exists();
+  }
+  async function showPublishedFallback() {
+    if(fallbackLoadPromise)return fallbackLoadPromise;
+    fallbackLoadPromise=(async()=>{try{const published=await loadPublished();if(!firestoreSnapshotsAreEmptyCache())return;data=published;appliedDataFingerprint=dataFingerprint(published);if(revealState.status!=='idle')cancelReveal();else renderLeaderboard();if(currentUser&&location.hash==='#admin')renderAdmin();$('connectionStatus').textContent='Offline fallback'}catch(error){console.warn('Published fallback failed:',error)}})();
+    try{await fallbackLoadPromise}finally{fallbackLoadPromise=null}
+  }
   function applyRealtimeData() {
     if(!teamSnapshot||!settingsSnapshot)return;
+    if(!teamSnapshot.metadata.fromCache||!settingsSnapshot.metadata.fromCache)hasServerBackedSnapshot=true;
+    if(firestoreSnapshotsAreEmptyCache()){showPublishedFallback();return}
     const settings=settingsSnapshot.exists()?settingsSnapshot.data():{};
     const teams=teamSnapshot.docs.map((item,index)=>{const value=item.data();return {id:item.id,name:value.name,iconUrl:value.icon||'',score:value.score,color:value.color,order:Number.isFinite(value.order)?value.order:index}}).sort((a,b)=>a.order-b.order);
     const result=validateDocument({maximumScore:settings.maxScore??100,updatedAt:snapshotDate(settings.updatedAt),teams});
     if(!result.valid){console.warn('Ignoring invalid Firestore leaderboard:',result.errors);announce('Live leaderboard data is invalid. An administrator must correct it.',true);return}
-    data=result.data;
-    if(revealState.status!=='idle')cancelReveal();else renderLeaderboard();
-    if(currentUser&&location.hash==='#admin')renderAdmin();
     const fromCache=teamSnapshot.metadata.fromCache||settingsSnapshot.metadata.fromCache;
     $('connectionStatus').textContent=fromCache?'Offline cache':'Live';
+    const fingerprint=dataFingerprint(result.data);
+    if(fingerprint===appliedDataFingerprint)return;
+    appliedDataFingerprint=fingerprint;data=result.data;
+    if(revealState.status!=='idle')cancelReveal();else renderLeaderboard();
+    if(currentUser&&location.hash==='#admin')renderAdmin();
   }
   function listenForLeaderboard() {
     unsubscribeTeams=onSnapshot(collection(db,'teams'),{includeMetadataChanges:true},snapshot=>{teamSnapshot=snapshot;applyRealtimeData()},error=>handleReadError(error));
@@ -401,7 +418,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
     } finally {button.disabled=false}
   }
 
-  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin()}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
+  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
   function openMenu(){ $('drawer').classList.add('open');$('drawer').setAttribute('aria-hidden','false');$('menuButton').setAttribute('aria-expanded','true');$('scrim').hidden=false;$('closeMenu').focus() }
   function closeMenu(){ $('drawer').classList.remove('open');$('drawer').setAttribute('aria-hidden','true');$('menuButton').setAttribute('aria-expanded','false');$('scrim').hidden=true }
   function confirmAction(title,message){return new Promise(resolve=>{const dialog=$('confirmDialog');$('dialogTitle').textContent=title;$('dialogMessage').textContent=message;dialog.showModal();dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true})})}

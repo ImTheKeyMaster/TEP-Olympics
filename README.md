@@ -11,7 +11,7 @@ The application remains a build-free static site hosted by GitHub Pages. `app.js
 - **Firestore Security Rules** allow public reads only for `teams` and `settings/leaderboard`; only authenticated Firebase users can write those documents. Every other collection is denied by default.
 - **Firestore's persistent browser cache** retains the last received leaderboard for offline viewing. Admin writes are blocked while the browser reports it is offline and the UI waits for Firestore to acknowledge pending writes.
 - `data/teams.json` is retained only as the reviewed, one-time migration seed and as an emergency display fallback if Firestore has never been available.
-- The service worker caches the application shell and local team icons. Firebase supplies network synchronization and its own Firestore cache.
+- The service worker caches the application shell, local team icons, and recursively discovers and caches the Firebase SDK module dependency graph during installation. Firebase supplies network synchronization and its own Firestore data cache.
 
 Firebase's web API key and project identifiers in `app.js` identify the public Firebase project; they are not secret credentials. Access control is enforced by Firebase Authentication and `firestore.rules`.
 
@@ -92,7 +92,9 @@ After a release, the version in `app.js`, the query strings in `index.html`, and
 
 ## PWA and offline behavior
 
-Visit once online and allow the service worker and Firestore cache to initialize. When offline, the UI shows Firestore's last locally cached snapshot when available. If no Firestore snapshot has ever been cached, it may show the repository seed as an emergency fallback. Offline data is informational; Admin mutations are not presented as saved.
+Visit once online and allow the service worker and Firestore cache to initialize. The worker does not finish installing until the Firebase entry modules and their imported dependencies are cached, which allows a later offline launch to evaluate the application module. When offline, the UI shows Firestore's last locally cached snapshot when available. An empty Firestore cache is not treated as an authoritative empty leaderboard before any server-backed snapshot has arrived; in that case the repository seed is shown as an emergency fallback. After any server-backed snapshot, Firestore remains authoritative, including when the server's leaderboard is intentionally empty. Offline data is informational; Admin mutations are not presented as saved.
+
+Realtime snapshot events do not replace an Admin team form containing unsaved changes. The newest Firestore data is retained in memory and reconciled into the editor after that form is saved or cancelled. Metadata-only snapshots also avoid unnecessary leaderboard and Admin rerenders.
 
 Use browser DevTools' Application panel to inspect the service worker/cache. Test PWA installation and updates over HTTPS or localhost.
 
