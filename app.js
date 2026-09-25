@@ -38,7 +38,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
   ];
   const $ = id => document.getElementById(id);
   let data = { maximumScore: 100, updatedAt: new Date().toISOString(), teams: [] };
-  let deferredInstall = null, pendingWorker = null, toastTimer, currentUser = null;
+  let pendingWorker = null, toastTimer, currentUser = null;
   let teamSnapshot = null, settingsSnapshot = null, unsubscribeTeams = null, unsubscribeSettings = null;
   let hasServerBackedSnapshot = false, fallbackLoadPromise = null, appliedDataFingerprint = '', adminRefreshPending = false;
   const teamRowElements = new Map();
@@ -401,14 +401,13 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
   function confirmAction(title,message){return new Promise(resolve=>{const dialog=$('confirmDialog');$('dialogTitle').textContent=title;$('dialogMessage').textContent=message;dialog.showModal();dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true})})}
 
   function bindEvents(){
-    addEventListener('hashchange',route);$('menuButton').onclick=openMenu;$('closeMenu').onclick=closeMenu;$('scrim').onclick=closeMenu;addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('refreshButton').onclick=()=>location.reload();$('revealButton').onclick=handleRevealButton;
+    addEventListener('hashchange',route);$('menuButton').onclick=openMenu;$('closeMenu').onclick=closeMenu;$('scrim').onclick=closeMenu;addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('revealButton').onclick=handleRevealButton;
     $('togglePassword').onclick=()=>{const p=$('password'),show=p.type==='password';p.type=show?'text':'password';$('togglePassword').textContent=show?'Hide':'Show';$('togglePassword').setAttribute('aria-label',show?'Hide password':'Show password')};
     $('loginForm').onsubmit=async e=>{e.preventDefault();const button=e.currentTarget.querySelector('[type=submit]');button.disabled=true;$('loginError').textContent='';try{await signInWithEmailAndPassword(auth,$('email').value.trim(),$('password').value);$('password').value='';announce('Signed in.')}catch(error){$('loginError').textContent=friendlyFirebaseError(error,'sign in');$('password').select()}finally{button.disabled=false}};
     $('logoutButton').onclick=async()=>{try{await signOut(auth);location.hash='leaderboard';announce('Logged out.')}catch(error){announce(friendlyFirebaseError(error,'log out'),true)}};
     $('maximumForm').onsubmit=async e=>{e.preventDefault();const raw=$('maximumScore').value,n=Number(raw);$('maximumError').textContent='';if(raw.trim()===''||!Number.isFinite(n)||n<=0){$('maximumError').textContent='Enter a number greater than zero.';announce('Maximum score is invalid.',true);return}await commitWrite(()=>setDoc(doc(db,'settings','leaderboard'),{maxScore:n,updatedAt:serverTimestamp(),schemaVersion:1},{merge:true}),'Maximum score updated.')};
     $('addTeam').onclick=()=>{const color=nextTeamColor(data.teams);if(!color){announce(`The ${TEAM_COLOR_PALETTE.length}-team color palette is full.`,true);return}const id=newId();data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,color,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
     addEventListener('online',()=>announce('Back online. Live updates resumed.'));addEventListener('offline',()=>announce('You are offline. Showing cached leaderboard data.',true));
-    addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;$('installButton').hidden=false});$('installButton').onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;$('installButton').hidden=true};addEventListener('appinstalled',()=>{$('installButton').hidden=true;announce('App installed.')});
     $('applyUpdate').onclick=()=>{pendingWorker?.postMessage('SKIP_WAITING')};
   }
   function registerServiceWorker(){if(!('serviceWorker'in navigator)||(location.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(location.hostname)))return;navigator.serviceWorker.register('service-worker.js',{updateViaCache:'none'}).then(reg=>{if(reg.waiting)showUpdate(reg.waiting);reg.addEventListener('updatefound',()=>{const worker=reg.installing;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(worker)})});reg.update().catch(error=>console.warn('Service worker update check failed:',error))}).catch(error=>console.warn('Service worker registration failed:',error));navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}
