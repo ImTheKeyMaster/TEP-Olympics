@@ -10,7 +10,7 @@ The application remains a build-free static site hosted by GitHub Pages. `app.js
 - **Firebase Authentication** Email/Password protects the Admin interface. There is no public registration flow.
 - **Firestore Security Rules** allow public reads only for `teams` and `settings/leaderboard`; only authenticated Firebase users can write those documents. Every other collection is denied by default.
 - **Firestore's persistent browser cache** retains the last received leaderboard for offline viewing. Admin writes are blocked while the browser reports it is offline and the UI waits for Firestore to acknowledge pending writes.
-- `data/teams.json` is retained only as the reviewed, one-time migration seed and as an emergency display fallback if Firestore has never been available.
+- `data/teams.json` remains the public offline/fallback data source when Firestore data is unavailable.
 - The service worker caches the application shell, local team icons, and recursively discovers and caches the Firebase SDK module dependency graph during installation. Firebase supplies network synchronization and its own Firestore data cache.
 
 Firebase's web API key and project identifiers in `app.js` identify the public Firebase project; they are not secret credentials. Access control is enforced by Firebase Authentication and `firestore.rules`.
@@ -23,7 +23,7 @@ teams/{teamId}
   icon: string             # relative local icon path or HTTPS URL
   score: number            # target score; never the transient displayed score
   color: string            # six-digit CSS hex color
-  order: integer           # stable Admin/migration ordering metadata
+  order: integer           # stable Admin ordering metadata
   updatedAt: timestamp
 
 settings/leaderboard
@@ -33,18 +33,6 @@ settings/leaderboard
 ```
 
 Reveal state is deliberately not stored. Before Reveal, clients show zeroes, empty bars, alphabetical rows, and no medals. Reveal snapshots the current Firestore target scores for the existing horse-race animation. Reset changes only that presentation state and never writes scores.
-
-## One-time initialization / migration
-
-The repository seed preserves the existing names, icons, scores, colors, and maximum score. To initialize a new database safely:
-
-1. Deploy the rules first (see below).
-2. In the Firebase Console, create an Email/Password Authentication user if one does not exist.
-3. Open the deployed site, choose **Admin**, and sign in with that user.
-4. Under **Initial data migration**, select **Initialize from Published Data** and confirm.
-5. Wait for the success message, then verify the `teams` collection and `settings/leaderboard` document in the Firebase Console.
-
-Initialization runs as a Firestore transaction. It stops rather than overwriting the leaderboard settings or any seed team document that already exists. The button is not an ongoing import tool: after initialization, use the normal Admin fields to edit Firestore directly.
 
 ## Authentication and Admin accounts
 
@@ -82,7 +70,7 @@ python3 -m http.server 8000
 
 Open <http://localhost:8000/>. Add `localhost` to Firebase Authentication's Authorized Domains if it is not already present and local Admin login is needed.
 
-To reproduce GitHub Pages' subdirectory behavior, serve `/workspace` and open <http://localhost:8000/TEP-Olympics/>. All application, manifest, icon, migration, and service-worker paths are relative to the application directory.
+To reproduce GitHub Pages' subdirectory behavior, serve `/workspace` and open <http://localhost:8000/TEP-Olympics/>. All application, manifest, icon, data, and service-worker paths are relative to the application directory.
 
 ## GitHub Pages deployment
 
@@ -102,7 +90,7 @@ Use browser DevTools' Application panel to inspect the service worker/cache. Tes
 
 - **Permission denied while saving:** deploy `firestore.rules`, confirm the user is still signed in, and confirm the app is pointed at `tep-olympics`.
 - **Login fails:** verify Email/Password is enabled, the user exists under Authentication → Users, and the current hostname is an Authorized Domain.
-- **Empty leaderboard:** on a new database, complete the one-time migration. Otherwise inspect `teams` and `settings/leaderboard` and the browser console.
+- **Empty leaderboard:** inspect `teams` and `settings/leaderboard` in Firestore and the browser console.
 - **Offline cache shown:** reconnect and leave the page open briefly. The status beside “Live standings” changes from **Offline cache** to **Live** when server-backed snapshots arrive.
 - **Old installed UI:** reload once online or accept the in-app update prompt. If needed, unregister the old worker in DevTools and reload.
 - **Custom icon does not display:** use an HTTPS URL that permits browser loading, or one of the repository-relative built-in icon paths.
@@ -113,7 +101,7 @@ Use browser DevTools' Application panel to inspect the service worker/cache. Tes
 - `index.html` — accessible single-page shell and Auth/Admin forms
 - `styles.css` — responsive visual design
 - `app.js` — Firebase initialization, real-time data flow, Auth, Admin operations, and Reveal
-- `data/teams.json` — one-time migration seed and emergency fallback
+- `data/teams.json` — public offline/fallback data source
 - `firestore.rules` — public-read/authenticated-write allowlist and validation
 - `firebase.json`, `.firebaserc` — Firestore rules deployment configuration
 - `manifest.webmanifest`, `service-worker.js` — PWA metadata and application-shell cache

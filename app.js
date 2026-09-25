@@ -1,6 +1,6 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache, persistentMultipleTabManager, runTransaction, serverTimestamp, setDoc, waitForPendingWrites, writeBatch } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache, persistentMultipleTabManager, serverTimestamp, setDoc, waitForPendingWrites, writeBatch } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
 (() => {
   'use strict';
@@ -394,29 +394,6 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
     console.warn('Firestore listener failed:',error); announce('The live leaderboard is unavailable. Showing the last available data.',true);
     if(!data.teams.length)try{data=await loadPublished();renderLeaderboard()}catch(loadError){console.warn('Fallback data failed:',loadError)}
   }
-  async function initializePublishedData() {
-    if(!currentUser)return;
-    if(!navigator.onLine){announce('Reconnect before initializing Firestore.',true);return}
-    let published;
-    try { published=await loadPublished(); }
-    catch(error){announce('Published migration data could not be loaded.',true);return}
-    if(!await confirmAction('Initialize Firestore?',`Copy ${published.teams.length} published teams and the maximum score into an empty database?`))return;
-    const button=$('initializeData');button.disabled=true;
-    try {
-      await runTransaction(db,async transaction=>{
-        const settingsRef=doc(db,'settings','leaderboard');
-        const refs=published.teams.map(team=>doc(db,'teams',team.id));
-        const existing=await Promise.all([transaction.get(settingsRef),...refs.map(ref=>transaction.get(ref))]);
-        if(existing.some(item=>item.exists()))throw Object.assign(new Error('already initialized'),{code:'already-exists'});
-        transaction.set(settingsRef,{maxScore:published.maximumScore,updatedAt:serverTimestamp(),schemaVersion:1});
-        published.teams.forEach((team,order)=>transaction.set(refs[order],{name:team.name,icon:team.iconUrl,score:team.score,color:team.color,order,updatedAt:serverTimestamp()}));
-      });
-      await waitForPendingWrites(db);announce('Firestore initialized from published data.');
-    } catch(error) {
-      if(error?.code==='already-exists')announce('Initialization stopped: Firestore already contains leaderboard data.',true);
-      else announce(friendlyFirebaseError(error,'initialize Firestore'),true);
-    } finally {button.disabled=false}
-  }
 
   function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
   function openMenu(){ $('drawer').classList.add('open');$('drawer').setAttribute('aria-hidden','false');$('menuButton').setAttribute('aria-expanded','true');$('scrim').hidden=false;$('closeMenu').focus() }
@@ -430,7 +407,6 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
     $('logoutButton').onclick=async()=>{try{await signOut(auth);location.hash='leaderboard';announce('Logged out.')}catch(error){announce(friendlyFirebaseError(error,'log out'),true)}};
     $('maximumForm').onsubmit=async e=>{e.preventDefault();const raw=$('maximumScore').value,n=Number(raw);$('maximumError').textContent='';if(raw.trim()===''||!Number.isFinite(n)||n<=0){$('maximumError').textContent='Enter a number greater than zero.';announce('Maximum score is invalid.',true);return}await commitWrite(()=>setDoc(doc(db,'settings','leaderboard'),{maxScore:n,updatedAt:serverTimestamp(),schemaVersion:1},{merge:true}),'Maximum score updated.')};
     $('addTeam').onclick=()=>{const color=nextTeamColor(data.teams);if(!color){announce(`The ${TEAM_COLOR_PALETTE.length}-team color palette is full.`,true);return}const id=newId();data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,color,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
-    $('initializeData').onclick=initializePublishedData;
     addEventListener('online',()=>announce('Back online. Live updates resumed.'));addEventListener('offline',()=>announce('You are offline. Showing cached leaderboard data.',true));
     addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;$('installButton').hidden=false});$('installButton').onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;$('installButton').hidden=true};addEventListener('appinstalled',()=>{$('installButton').hidden=true;announce('App installed.')});
     $('applyUpdate').onclick=()=>{pendingWorker?.postMessage('SKIP_WAITING')};
