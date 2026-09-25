@@ -5,6 +5,7 @@ import test from 'node:test';
 const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const worker = await readFile(new URL('../service-worker.js', import.meta.url), 'utf8');
+const styles = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 
 test('service worker precaches the complete Firebase module graph', () => {
   assert.match(worker, /const FIREBASE_MODULES = \[/);
@@ -55,4 +56,10 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(html, /alt="TEP Scavenger Hunt Objectives"/);
   assert.match(app, /'leaderboard','objectives','admin','about'/);
   assert.match(worker, /'\.\/images\/Objectives\.png'/);
+  assert.match(styles, /\.objectives-image\{[^}]*width:100%[^}]*max-width:1427px[^}]*height:auto[^}]*object-fit:contain/);
+  assert.match(styles, /@media\(max-width:650px\).*\.objectives-hint\{display:block/);
+  assert.match(app, /const APP_VERSION = '13'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '13'/);
+  assert.match(html, /styles\.css\?v=13/);
+  assert.match(html, /app\.js\?v=13/);
 });
