@@ -10,7 +10,7 @@ The application remains a build-free static site hosted by GitHub Pages. `app.js
 - **Firebase Authentication** Email/Password protects the Admin interface. There is no public registration flow.
 - **Firestore Security Rules** allow public reads only for `teams` and `settings/leaderboard`; only authenticated Firebase users can write those documents. Every other collection is denied by default.
 - **Firestore's persistent browser cache** retains the last received leaderboard for offline viewing. Admin writes are blocked while the browser reports it is offline and the UI waits for Firestore to acknowledge pending writes.
-- `data/teams.json` is retained as the public emergency display fallback if Firestore has never been available.
+- `data/teams.json` remains the public offline/fallback data source when Firestore data is unavailable.
 - The service worker caches the application shell, local team icons, and recursively discovers and caches the Firebase SDK module dependency graph during installation. Firebase supplies network synchronization and its own Firestore data cache.
 
 Firebase's web API key and project identifiers in `app.js` identify the public Firebase project; they are not secret credentials. Access control is enforced by Firebase Authentication and `firestore.rules`.
@@ -101,7 +101,7 @@ Use browser DevTools' Application panel to inspect the service worker/cache. Tes
 - `index.html` — accessible single-page shell and Auth/Admin forms
 - `styles.css` — responsive visual design
 - `app.js` — Firebase initialization, real-time data flow, Auth, Admin operations, and Reveal
-- `data/teams.json` — public emergency fallback data
+- `data/teams.json` — public offline/fallback data source
 - `firestore.rules` — public-read/authenticated-write allowlist and validation
 - `firebase.json`, `.firebaserc` — Firestore rules deployment configuration
 - `manifest.webmanifest`, `service-worker.js` — PWA metadata and application-shell cache
