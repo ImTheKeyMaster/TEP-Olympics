@@ -33,9 +33,11 @@ test('realtime events defer Admin replacement while a team form is dirty', () =>
   assert.match(app, /fingerprint===appliedDataFingerprint/);
 });
 
-test('navigation does not offer a redundant manual leaderboard refresh', () => {
+test('navigation contains only Leaderboard, Admin, and About', () => {
   assert.doesNotMatch(html, /refreshButton|↻ Refresh/);
   assert.doesNotMatch(app, /refreshButton/);
+  assert.doesNotMatch(html, /installButton|Install App/);
+  assert.deepEqual([...html.matchAll(/data-route="([^"]+)"/g)].map(match => match[1]), ['leaderboard', 'admin', 'about']);
   assert.match(app, /onSnapshot\(collection\(db,'teams'\)/);
   assert.match(app, /onSnapshot\(doc\(db,'settings','leaderboard'\)/);
 });
