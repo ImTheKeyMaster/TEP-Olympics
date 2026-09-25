@@ -33,9 +33,9 @@
     {
       "id": "placeholder-swords",
       "name": "Swords",
-      "iconUrl": "icons/swords.png",
+      "iconUrl": "icons/sword.png",
       "score": 25,
-      "color": "#c2410c"
+      "color": "#7e22ce"
     }
   ]
 }
