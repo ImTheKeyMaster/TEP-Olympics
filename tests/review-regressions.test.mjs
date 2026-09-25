@@ -5,6 +5,7 @@ import test from 'node:test';
 const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const worker = await readFile(new URL('../service-worker.js', import.meta.url), 'utf8');
+const styles = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 
 test('service worker precaches the complete Firebase module graph', () => {
   assert.match(worker, /const FIREBASE_MODULES = \[/);
@@ -33,11 +34,11 @@ test('realtime events defer Admin replacement while a team form is dirty', () =>
   assert.match(app, /fingerprint===appliedDataFingerprint/);
 });
 
-test('navigation contains only Leaderboard, Admin, and About', () => {
+test('navigation contains the application destinations in order', () => {
   assert.doesNotMatch(html, /refreshButton|↻ Refresh/);
   assert.doesNotMatch(app, /refreshButton/);
   assert.doesNotMatch(html, /installButton|Install App/);
-  assert.deepEqual([...html.matchAll(/data-route="([^"]+)"/g)].map(match => match[1]), ['leaderboard', 'admin', 'about']);
+  assert.deepEqual([...html.matchAll(/data-route="([^"]+)"/g)].map(match => match[1]), ['leaderboard', 'objectives', 'admin', 'about']);
   assert.match(app, /onSnapshot\(collection\(db,'teams'\)/);
   assert.match(app, /onSnapshot\(doc\(db,'settings','leaderboard'\)/);
 });
@@ -47,4 +48,18 @@ test('completed migration controls and code are removed while fallback loading r
   assert.doesNotMatch(app, /initializePublishedData|initializeData|runTransaction/);
   assert.match(app, /fetch\('data\/teams\.json'/);
   assert.match(app, /showPublishedFallback/);
+});
+
+test('Objectives is a responsive routed view available offline', () => {
+  assert.match(html, /id="objectivesScreen"/);
+  assert.match(html, /href="images\/Objectives\.png"[^>]*target="_blank"/);
+  assert.match(html, /alt="TEP Scavenger Hunt Objectives"/);
+  assert.match(app, /'leaderboard','objectives','admin','about'/);
+  assert.match(worker, /'\.\/images\/Objectives\.png'/);
+  assert.match(styles, /\.objectives-image\{[^}]*width:100%[^}]*max-width:1427px[^}]*height:auto[^}]*object-fit:contain/);
+  assert.match(styles, /@media\(max-width:650px\).*\.objectives-hint\{display:block/);
+  assert.match(app, /const APP_VERSION = '13'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '13'/);
+  assert.match(html, /styles\.css\?v=13/);
+  assert.match(html, /app\.js\?v=13/);
 });
