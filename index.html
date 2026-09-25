@@ -8,7 +8,7 @@
   <title>2026 Grand Chapter Scavenger Hunt</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/app-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <header class="topbar">
@@ -19,6 +19,7 @@
   <nav id="drawer" class="drawer" aria-label="Main navigation" aria-hidden="true">
     <div class="drawer-heading"><span>Menu</span><button id="closeMenu" class="icon-button" aria-label="Close navigation menu">×</button></div>
     <a href="#leaderboard" data-route="leaderboard">🏆 Leaderboard</a>
+    <a href="#objectives" data-route="objectives">📋 Objectives</a>
     <a href="#admin" data-route="admin">⚙️ Admin</a>
     <a href="#about" data-route="about">ⓘ About</a>
   </nav>
@@ -35,6 +36,16 @@
         <div id="revealStatus" class="visually-hidden" role="status" aria-live="polite" hidden>Score reveal started.</div>
         <ol id="leaderboard" class="leaderboard"></ol>
         <div id="emptyState" class="empty-state" hidden><strong>No teams yet</strong><p>Check back soon for the first competitors.</p></div>
+      </div>
+    </section>
+
+    <section id="objectivesScreen" class="screen objectives" hidden aria-labelledby="objectivesTitle">
+      <div class="page-heading"><div><p class="eyebrow">Scavenger hunt</p><h1 id="objectivesTitle">Objectives</h1></div></div>
+      <div class="panel objectives-panel">
+        <a class="objectives-image-link" href="images/Objectives.png" target="_blank" rel="noopener" aria-label="Open the full-resolution TEP Scavenger Hunt Objectives image in a new tab">
+          <img class="objectives-image" src="images/Objectives.png" alt="TEP Scavenger Hunt Objectives" width="1427" height="1102">
+        </a>
+        <p class="objectives-hint">Tap the image to open the full-resolution version.</p>
       </div>
     </section>
 
@@ -55,6 +66,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="updateNotice" class="update-notice" hidden><span>A new app version is ready.</span><button id="applyUpdate">Reload</button></div>
   <dialog id="confirmDialog"><form method="dialog"><h2 id="dialogTitle">Confirm action</h2><p id="dialogMessage"></p><div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button value="confirm" class="danger">Confirm</button></div></form></dialog>
-  <script type="module" src="app.js?v=12"></script>
+  <script type="module" src="app.js?v=13"></script>
 </body>
 </html>

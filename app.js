@@ -4,7 +4,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
 
 (() => {
   'use strict';
-  const APP_VERSION = '12';
+  const APP_VERSION = '13';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -395,7 +395,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
     if(!data.teams.length)try{data=await loadPublished();renderLeaderboard()}catch(loadError){console.warn('Fallback data failed:',loadError)}
   }
 
-  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','admin','about'].includes(name))name='leaderboard'; cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
+  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','objectives','admin','about'].includes(name))name='leaderboard'; cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
   function openMenu(){ $('drawer').classList.add('open');$('drawer').setAttribute('aria-hidden','false');$('menuButton').setAttribute('aria-expanded','true');$('scrim').hidden=false;$('closeMenu').focus() }
   function closeMenu(){ $('drawer').classList.remove('open');$('drawer').setAttribute('aria-hidden','true');$('menuButton').setAttribute('aria-expanded','false');$('scrim').hidden=true }
   function confirmAction(title,message){return new Promise(resolve=>{const dialog=$('confirmDialog');$('dialogTitle').textContent=title;$('dialogMessage').textContent=message;dialog.showModal();dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true})})}

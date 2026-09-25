@@ -33,11 +33,11 @@ test('realtime events defer Admin replacement while a team form is dirty', () =>
   assert.match(app, /fingerprint===appliedDataFingerprint/);
 });
 
-test('navigation contains only Leaderboard, Admin, and About', () => {
+test('navigation contains the application destinations in order', () => {
   assert.doesNotMatch(html, /refreshButton|↻ Refresh/);
   assert.doesNotMatch(app, /refreshButton/);
   assert.doesNotMatch(html, /installButton|Install App/);
-  assert.deepEqual([...html.matchAll(/data-route="([^"]+)"/g)].map(match => match[1]), ['leaderboard', 'admin', 'about']);
+  assert.deepEqual([...html.matchAll(/data-route="([^"]+)"/g)].map(match => match[1]), ['leaderboard', 'objectives', 'admin', 'about']);
   assert.match(app, /onSnapshot\(collection\(db,'teams'\)/);
   assert.match(app, /onSnapshot\(doc\(db,'settings','leaderboard'\)/);
 });
@@ -47,4 +47,12 @@ test('completed migration controls and code are removed while fallback loading r
   assert.doesNotMatch(app, /initializePublishedData|initializeData|runTransaction/);
   assert.match(app, /fetch\('data\/teams\.json'/);
   assert.match(app, /showPublishedFallback/);
+});
+
+test('Objectives is a responsive routed view available offline', () => {
+  assert.match(html, /id="objectivesScreen"/);
+  assert.match(html, /href="images\/Objectives\.png"[^>]*target="_blank"/);
+  assert.match(html, /alt="TEP Scavenger Hunt Objectives"/);
+  assert.match(app, /'leaderboard','objectives','admin','about'/);
+  assert.match(worker, /'\.\/images\/Objectives\.png'/);
 });
