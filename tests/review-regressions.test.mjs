@@ -161,8 +161,29 @@ test('Reload reports when registration.waiting is unexpectedly unavailable', asy
   await Promise.resolve();
   harness.elements.applyUpdate.click();
   assert.equal(harness.elements.updateMessage.textContent, 'The update is no longer ready. Checking again…');
+  await Promise.resolve();
+  assert.equal(harness.elements.updateMessage.textContent, 'No update is currently available. Please try again later.');
   assert.equal(harness.elements.applyUpdate.hidden, true);
   assert.equal(harness.reloads(), 0);
+});
+
+test('a superseded worker cannot overwrite the current update state', async () => {
+  const harness = updateHarness();
+  await Promise.resolve();
+  const first = new EventTargetMock();
+  first.state = 'installing';
+  harness.registration.installing = first;
+  harness.registration.dispatch('updatefound');
+  const second = new EventTargetMock();
+  second.state = 'installing';
+  harness.registration.installing = second;
+  harness.registration.dispatch('updatefound');
+  first.state = 'redundant';
+  first.dispatch('statechange');
+  assert.equal(harness.elements.updateMessage.textContent, 'Updating app… 0%');
+  second.state = 'installed';
+  second.dispatch('statechange');
+  assert.equal(harness.elements.updateMessage.textContent, 'A new app version is ready.');
 });
 
 test('a failed install reports failure without activating or discarding the current controller', async () => {

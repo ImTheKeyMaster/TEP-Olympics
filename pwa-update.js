@@ -89,12 +89,20 @@ export function registerPwaUpdate({
     reloadPage();
   });
 
-  applyButton.addEventListener('click', () => {
+  applyButton.addEventListener('click', async () => {
     if (applying) return;
     const waitingWorker = registration?.waiting;
     if (!waitingWorker) {
       showFailure('The update is no longer ready. Checking again…');
-      registration?.update().catch(error => console.warn('Service worker update check failed:', error));
+      try {
+        await registration?.update();
+        if (!registration?.waiting && !registration?.installing) {
+          showFailure('No update is currently available. Please try again later.');
+        }
+      } catch (error) {
+        console.warn('Service worker update check failed:', error);
+        showFailure('Unable to check for updates. Using the current version.');
+      }
       return;
     }
     showInstalling();
@@ -107,7 +115,9 @@ export function registerPwaUpdate({
     updateWorker = worker;
     if (hadController) showDownloading({ completed: 0, total: 0, percent: 0 }, worker);
     worker.addEventListener('statechange', () => {
-      if (!hadController) return;
+      // A newer updatefound event can supersede this worker. Its later
+      // redundant transition must not overwrite the newer worker's UI.
+      if (!hadController || worker !== updateWorker) return;
       if (worker.state === 'installed') showReady(worker);
       if (worker.state === 'redundant') showFailure();
     });
