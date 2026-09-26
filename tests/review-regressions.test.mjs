@@ -13,7 +13,7 @@ test('service worker precaches the complete Firebase module graph', () => {
   assert.match(worker, /staticImport/);
   assert.match(worker, /dynamicImport/);
   assert.match(worker, /pathname\.startsWith\('\/firebasejs\/11\.10\.0\/'\)/);
-  assert.match(worker, /cacheModuleGraph\(dependency, cache, visited, progress, true\)/);
+  assert.match(worker, /cacheModuleGraph\(dependency, cache, scheduled, progress, true\)/);
   assert.match(worker, /FIREBASE_MODULES\.map\(moduleUrl => cacheModuleGraph/);
 });
 
@@ -58,10 +58,10 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(worker, /'\.\/images\/Objectives\.png'/);
   assert.match(styles, /\.objectives-image\{[^}]*width:100%[^}]*max-width:1427px[^}]*height:auto[^}]*object-fit:contain/);
   assert.match(styles, /@media\(max-width:650px\).*\.objectives-hint\{display:block/);
-  assert.match(app, /const APP_VERSION = '15'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '15'/);
-  assert.match(html, /styles\.css\?v=15/);
-  assert.match(html, /app\.js\?v=15/);
+  assert.match(app, /const APP_VERSION = '16'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '16'/);
+  assert.match(html, /styles\.css\?v=16/);
+  assert.match(html, /app\.js\?v=16/);
 });
 
 test('update progress reports completed cache operations and gates reload', () => {
@@ -69,9 +69,11 @@ test('update progress reports completed cache operations and gates reload', () =
   assert.match(worker, /type: 'CACHE_PROGRESS'/);
   assert.match(worker, /percent: Math\.floor\(\(completed \/ total\) \* 100\)/);
   assert.match(worker, /Promise\.all\(SHELL\.map/);
+  assert.match(worker, /newDependencies\.forEach\(dependency => scheduled\.add\(dependency\)\)/);
+  assert.match(worker, /progress\?\.stop\(\);\s*await caches\.delete/);
   assert.match(worker, /await caches\.delete\(CACHE_NAME\)/);
   assert.match(worker, /type: 'CACHE_ERROR'/);
-  assert.match(app, /event\.data\.type==='CACHE_PROGRESS'/);
+  assert.match(app, /type==='CACHE_PROGRESS'&&!failedUpdateVersions\.has\(version\)/);
   assert.match(app, /'applyUpdate'\)\.hidden=true/);
   assert.match(app, /worker\.state==='installed'.*showUpdate\(worker\)/);
   assert.match(html, /role="progressbar"/);

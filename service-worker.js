@@ -1,4 +1,4 @@
-const DEPLOYMENT_VERSION = '15';
+const DEPLOYMENT_VERSION = '16';
 const CACHE_NAME = `tep-hunt-v${DEPLOYMENT_VERSION}`;
 const SHELL = ['./', './index.html', `./styles.css?v=${DEPLOYMENT_VERSION}`, `./app.js?v=${DEPLOYMENT_VERSION}`, './manifest.webmanifest', './data/teams.json', './images/Objectives.png', './images/JR.jpg', './icons/app-icon.svg', './icons/Emeralds.png', './icons/lamp.png', './icons/open-book.png', './icons/pearls.png', './icons/scroll.png', './icons/star.png', './icons/sword.png', './icons/three-plumes.png', './icons/torch.png'];
 const FIREBASE_MODULES = [
@@ -14,9 +14,12 @@ async function notifyClients(message) {
 
 function createProgress(total) {
   let completed = 0;
+  let active = true;
   return {
     addToTotal(count = 1) { total += count; },
+    stop() { active = false; },
     async complete() {
+      if (!active) return;
       completed += 1;
       await notifyClients({
         type: 'CACHE_PROGRESS',
@@ -35,10 +38,12 @@ async function cacheAsset(url, cache, progress) {
   await progress.complete();
 }
 
-async function cacheModuleGraph(url, cache, visited, progress, alreadyCounted = false) {
-  if (visited.has(url)) return;
-  visited.add(url);
-  if (!alreadyCounted) progress.addToTotal();
+async function cacheModuleGraph(url, cache, scheduled, progress, alreadyScheduled = false) {
+  if (!alreadyScheduled) {
+    if (scheduled.has(url)) return;
+    scheduled.add(url);
+    progress.addToTotal();
+  }
   const response = await fetch(url, { cache: 'no-cache' });
   if (!response.ok) throw new Error(`Unable to cache module ${url}`);
   await cache.put(url, response.clone());
@@ -59,21 +64,26 @@ async function cacheModuleGraph(url, cache, visited, progress, alreadyCounted = 
     });
   // Count newly discovered imports before reporting this module as complete so
   // a completed graph cannot be reported as 100% while dependencies remain.
-  const newDependencies = moduleDependencies.filter(dependency => !visited.has(dependency));
+  // Reserve dependencies synchronously. Concurrent branches can discover the
+  // same import, so claiming it before the next await keeps the total exact.
+  const newDependencies = moduleDependencies.filter(dependency => !scheduled.has(dependency));
+  newDependencies.forEach(dependency => scheduled.add(dependency));
   progress.addToTotal(newDependencies.length);
   await progress.complete();
-  await Promise.all(newDependencies.map(dependency => cacheModuleGraph(dependency, cache, visited, progress, true)));
+  await Promise.all(newDependencies.map(dependency => cacheModuleGraph(dependency, cache, scheduled, progress, true)));
 }
 
 self.addEventListener('install', event => event.waitUntil((async () => {
+  let progress;
   try {
     const cache = await caches.open(CACHE_NAME);
-    const progress = createProgress(SHELL.length + FIREBASE_MODULES.length);
+    progress = createProgress(SHELL.length + FIREBASE_MODULES.length);
     await notifyClients({ type: 'CACHE_PROGRESS', completed: 0, total: SHELL.length + FIREBASE_MODULES.length, percent: 0 });
     await Promise.all(SHELL.map(asset => cacheAsset(asset, cache, progress)));
-    const visited = new Set();
-    await Promise.all(FIREBASE_MODULES.map(moduleUrl => cacheModuleGraph(moduleUrl, cache, visited, progress, true)));
+    const scheduled = new Set(FIREBASE_MODULES);
+    await Promise.all(FIREBASE_MODULES.map(moduleUrl => cacheModuleGraph(moduleUrl, cache, scheduled, progress, true)));
   } catch (error) {
+    progress?.stop();
     await caches.delete(CACHE_NAME);
     await notifyClients({ type: 'CACHE_ERROR' });
     throw error;
