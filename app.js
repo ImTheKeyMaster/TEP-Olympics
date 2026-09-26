@@ -5,7 +5,7 @@ import { registerPwaUpdate } from './pwa-update.js';
 
 (() => {
   'use strict';
-  const APP_VERSION = '22';
+  const APP_VERSION = '23';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -434,7 +434,7 @@ import { registerPwaUpdate } from './pwa-update.js';
   }
   async function handleReadError(error) {
     console.warn('Firestore listener failed:',error); announce('The live leaderboard is unavailable. Showing the last available data.',true);
-    if(!data.teams.length)try{data=await loadPublished();renderLeaderboard()}catch(loadError){console.warn('Fallback data failed:',loadError)}
+    if(!data.teams.length)try{data=await loadPublished();renderLeaderboard();renderRosters()}catch(loadError){console.warn('Fallback data failed:',loadError)}
   }
 
   function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','objectives','rosters','admin','about'].includes(name))name='leaderboard'; if($('objectivesViewer').open)$('objectivesViewer').close(); cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }

@@ -107,10 +107,10 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
-  assert.match(app, /const APP_VERSION = '22'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '22'/);
-  assert.match(html, /styles\.css\?v=22/);
-  assert.match(html, /app\.js\?v=22/);
+  assert.match(app, /const APP_VERSION = '23'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '23'/);
+  assert.match(html, /styles\.css\?v=23/);
+  assert.match(html, /app\.js\?v=23/);
 });
 
 test('Team Rosters is routed, sorted in the app, themed from live teams, and available offline', () => {
@@ -125,11 +125,19 @@ test('Team Rosters is routed, sorted in the app, themed from live teams, and ava
   assert.match(app, /team\?\.color/);
   assert.match(app, /safeIconUrl\(team\?\.iconUrl\)/);
   assert.match(app, /renderRosters\(\);\s*if\(currentUser/);
+  assert.match(app, /data=await loadPublished\(\);renderLeaderboard\(\);renderRosters\(\)/);
   assert.match(worker, /'\.\/data\/rosters\.json'/);
   assert.deepEqual([...rosters.teams].sort((a,b)=>a.name.localeCompare(b.name)).map(team=>team.name), ['Emeralds','Lamps','Pearls','Plumes','Swords']);
+  const expectedLastNames = {
+    Emeralds: ['Aller','Aukamp','Brown','Gordon','Klugman','Koff','Mitchell','Rogers','Warren'],
+    Lamps: ['Averbukh','Barron','Difalco','Gaglione','Herman','Jordan','Kaiser','Moretti'],
+    Pearls: ['Amaral','Butler','Fischer','Hacker','Hawthorn','Hildebrant','Rappaport','Sponzo','Yenuganti'],
+    Plumes: ['Baez','Buckley','Figueroa','Gresser','Loiselle','McNally','McVeigh','Schonfeld','Ten-Ami'],
+    Swords: ['Arbesfeld','Demasi','Hoyos','Hurley','Kirshbaum','LaRusso',"O'Neill",'Siden','Spolansky']
+  };
   for (const team of rosters.teams) {
-    const expected=[...team.members].sort((a,b)=>a.lastName.localeCompare(b.lastName)||a.firstName.localeCompare(b.firstName));
-    assert.equal(expected.length, team.members.length);
+    const sortedMembers=[...team.members].sort((a,b)=>a.lastName.localeCompare(b.lastName)||a.firstName.localeCompare(b.firstName));
+    assert.deepEqual(sortedMembers.map(member=>member.lastName), expectedLastNames[team.name]);
   }
   assert.deepEqual(rosters.teams.flatMap(team=>team.members).find(member=>member.lastName==="O'Neill"), { firstName:'Brandon', lastName:"O'Neill", chapter:'Rho' });
   assert.deepEqual(rosters.teams.flatMap(team=>team.members).find(member=>member.lastName==='Ten-Ami'), { firstName:'Ethan', lastName:'Ten-Ami', chapter:'Gamma Tau' });
