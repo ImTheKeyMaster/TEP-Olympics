@@ -88,6 +88,17 @@ export function registerPwaUpdate({
     if (activatedWorkerControlsPage() || (!applying && updateWorker && serviceWorkers.controller === updateWorker)) finishUpdate();
   }
 
+  function activationStateChanged() {
+    if (activatingWorker?.state === 'redundant') {
+      applying = false;
+      activatingWorker = null;
+      clearTimeout(activationFallback);
+      showFailure('Update installation failed. Using the current version.');
+      return;
+    }
+    reconcileController();
+  }
+
   serviceWorkers.addEventListener('message', event => {
     const payload = event.data;
     if (!hadController || !payload || event.source === serviceWorkers.controller) return;
@@ -127,13 +138,21 @@ export function registerPwaUpdate({
     }
     showInstalling();
     activatingWorker = waitingWorker;
-    waitingWorker.addEventListener?.('statechange', reconcileController);
-    waitingWorker.postMessage('SKIP_WAITING');
+    waitingWorker.addEventListener?.('statechange', activationStateChanged);
+    try {
+      waitingWorker.postMessage('SKIP_WAITING');
+    } catch (error) {
+      console.warn('Unable to activate the service worker update:', error);
+      applying = false;
+      activatingWorker = null;
+      showFailure('Unable to install the update. Please try again later.');
+      return;
+    }
     // The state/controller may have changed synchronously before the listeners
     // above ran. A focus/visibility check below covers background Chrome tabs;
     // this short check only verifies lifecycle state and never forces a reload.
     reconcileController();
-    activationFallback = setTimeout(reconcileController, 3000);
+    if (!reloadRequested) activationFallback = setTimeout(reconcileController, 3000);
   });
 
   function observeInstalling(worker) {

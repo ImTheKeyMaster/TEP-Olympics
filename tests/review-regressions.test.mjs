@@ -99,6 +99,7 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /\.objectives-control,\.objectives-close\{[^}]*width:48px[^}]*height:48px/);
   assert.match(styles, /\.objectives-viewer\{[^}]*100dvw[^}]*100dvh/);
   assert.match(styles, /touch-action:pan-x pan-y pinch-zoom/);
+  assert.match(styles, /\.objectives-viewer-image-wrap\{[^}]*width:max-content[^}]*height:max-content[^}]*min-width:100%[^}]*min-height:100%/);
   assert.match(app, /addEventListener\('resize',\(\)=>\{if\(viewer\.open\)applyZoom/);
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
@@ -178,6 +179,21 @@ test('Chrome tab only reloads after the selected update controls it', async () =
   waiting.dispatch('statechange');
   assert.equal(harness.elements.updateNotice.hidden, true);
   assert.equal(harness.reloads(), 1);
+});
+
+test('a waiting worker that becomes redundant exits the installing state', async () => {
+  const harness = updateHarness();
+  await Promise.resolve();
+  const waiting = new EventTargetMock();
+  waiting.state = 'installed';
+  waiting.postMessage = () => {};
+  harness.registration.waiting = waiting;
+  harness.elements.applyUpdate.click();
+  waiting.state = 'redundant';
+  waiting.dispatch('statechange');
+  assert.equal(harness.elements.updateMessage.textContent, 'Update installation failed. Using the current version.');
+  assert.equal(harness.elements.updateProgress.hidden, true);
+  assert.equal(harness.reloads(), 0);
 });
 
 test('Reload reports when registration.waiting is unexpectedly unavailable', async () => {
