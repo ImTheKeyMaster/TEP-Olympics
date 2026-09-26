@@ -4,7 +4,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
 
 (() => {
   'use strict';
-  const APP_VERSION = '14';
+  const APP_VERSION = '15';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -410,8 +410,10 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
     addEventListener('online',()=>announce('Back online. Live updates resumed.'));addEventListener('offline',()=>announce('You are offline. Showing cached leaderboard data.',true));
     $('applyUpdate').onclick=()=>{pendingWorker?.postMessage('SKIP_WAITING')};
   }
-  function registerServiceWorker(){if(!('serviceWorker'in navigator)||(location.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(location.hostname)))return;navigator.serviceWorker.register('service-worker.js',{updateViaCache:'none'}).then(reg=>{if(reg.waiting)showUpdate(reg.waiting);reg.addEventListener('updatefound',()=>{const worker=reg.installing;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(worker)})});reg.update().catch(error=>console.warn('Service worker update check failed:',error))}).catch(error=>console.warn('Service worker registration failed:',error));navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}
-  function showUpdate(worker){pendingWorker=worker;$('updateNotice').hidden=false}
+  function registerServiceWorker(){if(!('serviceWorker'in navigator)||(location.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(location.hostname)))return;navigator.serviceWorker.addEventListener('message',event=>{if(!navigator.serviceWorker.controller||!event.data)return;if(event.data.type==='CACHE_PROGRESS')showUpdateProgress(event.data,event.source);if(event.data.type==='CACHE_ERROR')showUpdateFailure()});navigator.serviceWorker.register('service-worker.js',{updateViaCache:'none'}).then(reg=>{if(reg.waiting)showUpdate(reg.waiting);reg.addEventListener('updatefound',()=>{const worker=reg.installing;if(navigator.serviceWorker.controller)showUpdateProgress({percent:0},worker);worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(worker);if(worker.state==='redundant'&&navigator.serviceWorker.controller)showUpdateFailure()})});reg.update().catch(error=>console.warn('Service worker update check failed:',error))}).catch(error=>console.warn('Service worker registration failed:',error));navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}
+  function showUpdateProgress(message,worker){pendingWorker=worker||pendingWorker;const percent=Math.max(0,Math.min(100,Number(message.percent)||0));$('updateMessage').textContent=`Updating app… ${percent}%`;$('updateProgress').hidden=false;$('updateProgress').setAttribute('aria-valuenow',String(percent));$('updateProgress').style.setProperty('--update-progress',percent/100);$('applyUpdate').hidden=true;$('updateNotice').hidden=false}
+  function showUpdate(worker){pendingWorker=worker;$('updateMessage').textContent='A new app version is ready.';$('updateProgress').hidden=true;$('applyUpdate').hidden=false;$('updateNotice').hidden=false}
+  function showUpdateFailure(){pendingWorker=null;$('updateMessage').textContent='Update failed. Using the current version.';$('updateProgress').hidden=true;$('applyUpdate').hidden=true;$('updateNotice').hidden=false}
   async function init(){console.log(`[TEP Olympics] App version ${APP_VERSION}`);bindEvents();renderLeaderboard();listenForLeaderboard();onAuthStateChanged(auth,user=>{currentUser=user;route()});route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerServiceWorker()}
   init().catch(error=>{console.error(error);announce('The app encountered an unexpected error.',true)});
 })();
