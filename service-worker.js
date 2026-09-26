@@ -1,6 +1,6 @@
-const DEPLOYMENT_VERSION = '17';
+const DEPLOYMENT_VERSION = '18';
 const CACHE_NAME = `tep-hunt-v${DEPLOYMENT_VERSION}`;
-const SHELL = ['./', './index.html', `./styles.css?v=${DEPLOYMENT_VERSION}`, `./app.js?v=${DEPLOYMENT_VERSION}`, './manifest.webmanifest', './data/teams.json', './images/Objectives.png', './images/JR.jpg', './icons/app-icon.svg', './icons/Emeralds.png', './icons/lamp.png', './icons/open-book.png', './icons/pearls.png', './icons/scroll.png', './icons/star.png', './icons/sword.png', './icons/three-plumes.png', './icons/torch.png'];
+const SHELL = ['./', './index.html', `./styles.css?v=${DEPLOYMENT_VERSION}`, `./app.js?v=${DEPLOYMENT_VERSION}`, './pwa-update.js', './manifest.webmanifest', './data/teams.json', './images/Objectives.png', './images/JR.jpg', './icons/app-icon.svg', './icons/Emeralds.png', './icons/lamp.png', './icons/open-book.png', './icons/pearls.png', './icons/scroll.png', './icons/star.png', './icons/sword.png', './icons/three-plumes.png', './icons/torch.png'];
 const FIREBASE_MODULES = [
   'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js',
@@ -90,11 +90,15 @@ self.addEventListener('install', event => event.waitUntil((async () => {
   }
 })()));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim())));
-self.addEventListener('message', event => { if (event.data === 'SKIP_WAITING') self.skipWaiting(); });
+self.addEventListener('message', event => { if (event.data === 'SKIP_WAITING') event.waitUntil(self.skipWaiting()); });
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== location.origin) {
+    // Firestore's streaming requests can remain open for minutes. Let them go
+    // directly to the network so they cannot keep a retiring worker alive;
+    // continue runtime caching other external assets such as custom team icons.
+    if (url.hostname === 'firestore.googleapis.com') return;
     event.respondWith(fetch(event.request).then(response => {
       const copy=response.clone(); caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy)); return response;
     }).catch(() => caches.match(event.request)));
