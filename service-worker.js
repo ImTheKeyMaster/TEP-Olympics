@@ -1,6 +1,6 @@
-const DEPLOYMENT_VERSION = '13';
+const DEPLOYMENT_VERSION = '14';
 const CACHE_NAME = `tep-hunt-v${DEPLOYMENT_VERSION}`;
-const SHELL = ['./', './index.html', `./styles.css?v=${DEPLOYMENT_VERSION}`, `./app.js?v=${DEPLOYMENT_VERSION}`, './manifest.webmanifest', './data/teams.json', './images/Objectives.png', './icons/app-icon.svg', './icons/Emeralds.png', './icons/lamp.png', './icons/open-book.png', './icons/pearls.png', './icons/scroll.png', './icons/star.png', './icons/sword.png', './icons/three-plumes.png', './icons/torch.png'];
+const SHELL = ['./', './index.html', `./styles.css?v=${DEPLOYMENT_VERSION}`, `./app.js?v=${DEPLOYMENT_VERSION}`, './manifest.webmanifest', './data/teams.json', './images/Objectives.png', './images/JR.jpg', './icons/app-icon.svg', './icons/Emeralds.png', './icons/lamp.png', './icons/open-book.png', './icons/pearls.png', './icons/scroll.png', './icons/star.png', './icons/sword.png', './icons/three-plumes.png', './icons/torch.png'];
 const FIREBASE_MODULES = [
   'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js',

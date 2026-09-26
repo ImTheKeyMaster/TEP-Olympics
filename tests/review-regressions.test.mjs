@@ -58,8 +58,18 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(worker, /'\.\/images\/Objectives\.png'/);
   assert.match(styles, /\.objectives-image\{[^}]*width:100%[^}]*max-width:1427px[^}]*height:auto[^}]*object-fit:contain/);
   assert.match(styles, /@media\(max-width:650px\).*\.objectives-hint\{display:block/);
-  assert.match(app, /const APP_VERSION = '13'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '13'/);
-  assert.match(html, /styles\.css\?v=13/);
-  assert.match(html, /app\.js\?v=13/);
+  assert.match(app, /const APP_VERSION = '14'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '14'/);
+  assert.match(html, /styles\.css\?v=14/);
+  assert.match(html, /app\.js\?v=14/);
+});
+
+test('About the Event presents J.R. responsively and offline', () => {
+  assert.match(html, /id="aboutTitle">About the Event</);
+  assert.match(html, /src="images\/JR\.jpg" alt="J\.R\. Benning, outgoing National Consul"/);
+  assert.match(html, /Consider it his parting gift to the Fraternity\./);
+  assert.match(worker, /'\.\/images\/JR\.jpg'/);
+  assert.match(styles, /\.about\{display:grid;grid-template-columns:/);
+  assert.match(styles, /\.about-portrait img\{[^}]*width:100%[^}]*height:auto[^}]*object-fit:contain/);
+  assert.match(styles, /@media\(max-width:650px\).*\.about\{grid-template-columns:1fr/);
 });
