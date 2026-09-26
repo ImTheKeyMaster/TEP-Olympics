@@ -8,7 +8,7 @@
   <title>2026 Grand Chapter Scavenger Hunt</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/app-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=21">
+  <link rel="stylesheet" href="styles.css?v=22">
 </head>
 <body>
   <header class="topbar">
@@ -20,6 +20,7 @@
     <div class="drawer-heading"><span>Menu</span><button id="closeMenu" class="icon-button" aria-label="Close navigation menu">×</button></div>
     <a href="#leaderboard" data-route="leaderboard">🏆 Leaderboard</a>
     <a href="#objectives" data-route="objectives">📋 Objectives</a>
+    <a href="#rosters" data-route="rosters">👥 Team Rosters</a>
     <a href="#admin" data-route="admin">⚙️ Admin</a>
     <a href="#about" data-route="about">ⓘ About</a>
   </nav>
@@ -47,6 +48,11 @@
         </button>
         <p class="objectives-hint">Tap the image to view and zoom.</p>
       </div>
+    </section>
+
+    <section id="rostersScreen" class="screen rosters" hidden aria-labelledby="rostersTitle">
+      <div class="page-heading rosters-heading"><div><p class="eyebrow">Meet the competitors</p><h1 id="rostersTitle">Team Rosters</h1></div><a class="objectives-close" href="#leaderboard" aria-label="Return to leaderboard">×</a></div>
+      <div id="rosterTeams" class="roster-teams" aria-live="polite"><p class="rosters-status">Loading team rosters…</p></div>
     </section>
 
     <section id="loginScreen" class="screen narrow" hidden aria-labelledby="loginTitle">
@@ -96,6 +102,6 @@
     <button id="applyUpdate" hidden>Reload</button>
   </div>
   <dialog id="confirmDialog"><form method="dialog"><h2 id="dialogTitle">Confirm action</h2><p id="dialogMessage"></p><div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button value="confirm" class="danger">Confirm</button></div></form></dialog>
-  <script type="module" src="app.js?v=21"></script>
+  <script type="module" src="app.js?v=22"></script>
 </body>
 </html>

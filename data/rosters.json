@@ -1,0 +1,73 @@
+{
+  "teams": [
+    {
+      "name": "Emeralds",
+      "members": [
+        { "firstName": "Jack", "lastName": "Aller", "chapter": "Epsilon Phi" },
+        { "firstName": "Benjamin", "lastName": "Warren", "chapter": "Sigma Epsilon" },
+        { "firstName": "Arthur", "lastName": "Gordon", "chapter": "Phi Eta" },
+        { "firstName": "Max", "lastName": "Aukamp", "chapter": "Phi Psi" },
+        { "firstName": "Noah", "lastName": "Klugman", "chapter": "Nu" },
+        { "firstName": "David", "lastName": "Mitchell", "chapter": "Alpha Sigma" },
+        { "firstName": "Blake", "lastName": "Koff", "chapter": "Eta Tau" },
+        { "firstName": "Dylan", "lastName": "Rogers", "chapter": "Sigma Alpha Sigma" },
+        { "firstName": "Max", "lastName": "Brown", "chapter": "Tau Beta" }
+      ]
+    },
+    {
+      "name": "Pearls",
+      "members": [
+        { "firstName": "Venkata", "lastName": "Yenuganti", "chapter": "Rho" },
+        { "firstName": "Michael", "lastName": "Sponzo", "chapter": "Lambda Phi Epsilon" },
+        { "firstName": "Wyatt", "lastName": "Hacker", "chapter": "Epsilon Iota" },
+        { "firstName": "Benjamin", "lastName": "Butler", "chapter": "Tau Omega" },
+        { "firstName": "Evan", "lastName": "Hildebrant", "chapter": "Phi Psi" },
+        { "firstName": "Samuel", "lastName": "Rappaport", "chapter": "Tau Alpha" },
+        { "firstName": "Logan", "lastName": "Fischer", "chapter": "Nu" },
+        { "firstName": "Tyler", "lastName": "Amaral", "chapter": "Omega Alpha" },
+        { "firstName": "Charles", "lastName": "Hawthorn", "chapter": "Theta Tau" }
+      ]
+    },
+    {
+      "name": "Plumes",
+      "members": [
+        { "firstName": "Matthew", "lastName": "Gresser", "chapter": "Tau Delta" },
+        { "firstName": "Andrew", "lastName": "Loiselle", "chapter": "Epsilon Phi" },
+        { "firstName": "Sam", "lastName": "McVeigh", "chapter": "Sigma Epsilon" },
+        { "firstName": "Ethan", "lastName": "Ten-Ami", "chapter": "Gamma Tau" },
+        { "firstName": "Sebastian", "lastName": "Baez", "chapter": "Sigma Lambda" },
+        { "firstName": "Jackson", "lastName": "McNally", "chapter": "Tau Omega" },
+        { "firstName": "Joseph", "lastName": "Buckley", "chapter": "Theta Tau" },
+        { "firstName": "Jeremy", "lastName": "Schonfeld", "chapter": "Eta Tau" },
+        { "firstName": "Charlie", "lastName": "Figueroa", "chapter": "Phi Upsilon" }
+      ]
+    },
+    {
+      "name": "Swords",
+      "members": [
+        { "firstName": "Danny", "lastName": "Spolansky", "chapter": "Gamma Tau" },
+        { "firstName": "Johnny", "lastName": "Demasi", "chapter": "Epsilon Phi" },
+        { "firstName": "Ethan", "lastName": "Arbesfeld", "chapter": "Phi Upsilon" },
+        { "firstName": "James", "lastName": "Hurley", "chapter": "Alpha Sigma" },
+        { "firstName": "Donald", "lastName": "Hoyos", "chapter": "Sigma Epsilon" },
+        { "firstName": "Thomas", "lastName": "LaRusso", "chapter": "Omega Alpha" },
+        { "firstName": "Brandon", "lastName": "O'Neill", "chapter": "Rho" },
+        { "firstName": "Tyler", "lastName": "Siden", "chapter": "Tau Beta" },
+        { "firstName": "Jordan", "lastName": "Kirshbaum", "chapter": "Tau Delta" }
+      ]
+    },
+    {
+      "name": "Lamps",
+      "members": [
+        { "firstName": "Jaden", "lastName": "Kaiser", "chapter": "Tau Alpha" },
+        { "firstName": "Jake", "lastName": "Herman", "chapter": "Lambda Phi Epsilon" },
+        { "firstName": "Michael", "lastName": "Gaglione", "chapter": "Sigma Lambda" },
+        { "firstName": "William", "lastName": "Barron", "chapter": "Epsilon Theta" },
+        { "firstName": "Giorgio", "lastName": "Difalco", "chapter": "Phi Eta" },
+        { "firstName": "Kevin", "lastName": "Jordan", "chapter": "Alpha Sigma" },
+        { "firstName": "Simon", "lastName": "Averbukh", "chapter": "Epsilon Iota" },
+        { "firstName": "Andrew", "lastName": "Moretti", "chapter": "Epsilon Phi" }
+      ]
+    }
+  ]
+}
