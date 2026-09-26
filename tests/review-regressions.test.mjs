@@ -52,16 +52,23 @@ test('completed migration controls and code are removed while fallback loading r
 
 test('Objectives is a responsive routed view available offline', () => {
   assert.match(html, /id="objectivesScreen"/);
+  assert.match(html, /class="objectives-button" href="#objectives">Objectives<\/a><button id="revealButton"/);
+  assert.match(html, /class="objectives-close" href="#leaderboard" aria-label="Return to leaderboard">×<\/a>/);
   assert.match(html, /href="images\/Objectives\.png"[^>]*target="_blank"/);
   assert.match(html, /alt="TEP Scavenger Hunt Objectives"/);
   assert.match(app, /'leaderboard','objectives','admin','about'/);
   assert.match(worker, /'\.\/images\/Objectives\.png'/);
   assert.match(styles, /\.objectives-image\{[^}]*width:100%[^}]*max-width:1427px[^}]*height:auto[^}]*object-fit:contain/);
   assert.match(styles, /@media\(max-width:650px\).*\.objectives-hint\{display:block/);
-  assert.match(app, /const APP_VERSION = '16'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '16'/);
-  assert.match(html, /styles\.css\?v=16/);
-  assert.match(html, /app\.js\?v=16/);
+  assert.match(styles, /\.objectives-button\{[^}]*min-height:48px/);
+  assert.match(styles, /\.objectives-close\{[^}]*width:48px[^}]*height:48px/);
+  assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
+  assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
+  assert.match(app, /const APP_VERSION = '17'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '17'/);
+  assert.match(html, /styles\.css\?v=17/);
+  assert.match(html, /app\.js\?v=17/);
 });
 
 test('update progress reports completed cache operations and gates reload', () => {
