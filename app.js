@@ -5,7 +5,7 @@ import { registerPwaUpdate } from './pwa-update.js';
 
 (() => {
   'use strict';
-  const APP_VERSION = '18';
+  const APP_VERSION = '19';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -113,7 +113,13 @@ import { registerPwaUpdate } from './pwa-update.js';
     } catch { return ''; }
   }
   function announce(message, error = false) { const toast=$('toast'); toast.textContent=message; toast.style.background=error?'#751b29':'#172a22'; toast.hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>toast.hidden=true,3500); }
-  function hashHue(id) { let h=0; for (const c of id) h=(h*31+c.charCodeAt(0))%360; return (h%70)+255; }
+  function contrastingTextColor(color) {
+    const hex=color.replace('#','');
+    const channels=(hex.length===3?[...hex].map(value=>value+value):hex.match(/.{2}/g) || []).map(value=>parseInt(value,16)/255);
+    if(channels.length!==3 || channels.some(value=>!Number.isFinite(value)))return '#ffffff';
+    const luminance=channels.map(value=>value<=.04045?value/12.92:((value+.055)/1.055)**2.4).reduce((sum,value,index)=>sum+value*[.2126,.7152,.0722][index],0);
+    return luminance>.179?'#21172c':'#ffffff';
+  }
   function formatNumber(n) { return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2))); }
   function formatDate(iso) { const d=new Date(iso); return d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }
   function compareTeams(a,b,scoreFor=team=>team.score) { return scoreFor(b)-scoreFor(a) || a.name.localeCompare(b.name,undefined,{sensitivity:'base'}); }
@@ -127,9 +133,9 @@ import { registerPwaUpdate } from './pwa-update.js';
     const medal=document.createElement('span'); medal.className='medal'; medal.hidden=true;
     const img=document.createElement('img'); img.className='team-icon'; img.alt=''; img.loading='lazy'; img.referrerPolicy='no-referrer'; img.src=safeIconUrl(team.iconUrl)||FALLBACK_ICON; img.addEventListener('error',()=>{if(!img.src.endsWith(FALLBACK_ICON))img.src=FALLBACK_ICON;},{once:true});
     const main=document.createElement('div'); main.className='team-main'; const name=document.createElement('div'); name.className='team-name'; name.textContent=team.name; name.title=team.name;
-    const progress=document.createElement('div'); progress.className='progress'; progress.setAttribute('role','progressbar'); progress.setAttribute('aria-valuemin','0'); progress.setAttribute('aria-valuemax',String(data.maximumScore)); progress.style.setProperty('--hue',hashHue(team.id));
-    const fill=document.createElement('div'); fill.className='progress-fill'; const score=document.createElement('span'); score.className='score-label'; progress.append(fill,score); main.append(name,progress); content.append(img,main,medal); li.append(content);
-    const elements={team,row:li,content,medal,img,progress,fill,label:score}; teamRowElements.set(team.id,elements);
+    const progress=document.createElement('div'); progress.className='progress'; progress.setAttribute('role','progressbar'); progress.setAttribute('aria-valuemin','0'); progress.setAttribute('aria-valuemax',String(data.maximumScore)); progress.style.setProperty('--fill-label-color',contrastingTextColor(team.color));
+    const fill=document.createElement('div'); fill.className='progress-fill'; const score=document.createElement('span'); score.className='score-label score-label-unfilled'; score.setAttribute('aria-hidden','true'); const filledScore=score.cloneNode(); filledScore.className='score-label score-label-filled'; progress.append(fill,score,filledScore); main.append(name,progress); content.append(img,main,medal); li.append(content);
+    const elements={team,row:li,content,medal,img,progress,fill,labels:[score,filledScore]}; teamRowElements.set(team.id,elements);
     updateTeamVisuals(team.id,displayedScore); return li;
   }
   function updateTeamMedal(teamId,index,show=false,animate=false) {
@@ -139,10 +145,10 @@ import { registerPwaUpdate } from './pwa-update.js';
   }
   function updateTeamVisuals(teamId,score,displayPrecision=null) {
     const elements=teamRowElements.get(teamId); if(!elements)return;
-    const {team,progress,fill,label}=elements, displayedScore=displayPrecision===null?score:Number(score.toFixed(displayPrecision));
+    const {team,progress,labels}=elements, displayedScore=displayPrecision===null?score:Number(score.toFixed(displayPrecision));
     const pct=data.maximumScore ? score/data.maximumScore*100 : 0, clamped=Math.min(100,Math.max(0,pct));
-    label.textContent=`${formatNumber(displayedScore)} / ${formatNumber(data.maximumScore)}`; progress.setAttribute('aria-label',`${team.name}: ${formatNumber(displayedScore)} of ${formatNumber(data.maximumScore)} points, ${Math.round(pct)} percent`); progress.setAttribute('aria-valuenow',String(Math.min(score,data.maximumScore)));
-    fill.style.setProperty('--progress',String(clamped/100));
+    labels.forEach(label=>label.textContent=`${formatNumber(displayedScore)} / ${formatNumber(data.maximumScore)}`); progress.setAttribute('aria-label',`${team.name}: ${formatNumber(displayedScore)} of ${formatNumber(data.maximumScore)} points, ${Math.round(pct)} percent`); progress.setAttribute('aria-valuenow',String(Math.min(score,data.maximumScore)));
+    progress.style.setProperty('--progress',String(clamped/100)); progress.style.setProperty('--progress-remaining',`${100-clamped}%`);
   }
 
   function renderLeaderboard() {

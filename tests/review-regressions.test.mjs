@@ -97,10 +97,10 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
-  assert.match(app, /const APP_VERSION = '18'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '18'/);
-  assert.match(html, /styles\.css\?v=18/);
-  assert.match(html, /app\.js\?v=18/);
+  assert.match(app, /const APP_VERSION = '19'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '19'/);
+  assert.match(html, /styles\.css\?v=19/);
+  assert.match(html, /app\.js\?v=19/);
 });
 
 test('update progress reports completed cache operations and gates reload', () => {
@@ -131,7 +131,7 @@ test('installing-worker progress appears before ready, including completed and t
   harness.registration.installing = installing;
   harness.registration.dispatch('updatefound');
   assert.equal(harness.elements.updateMessage.textContent, 'Updating app… 0%');
-  harness.serviceWorkers.dispatch('message', { source: installing, data: { type: 'CACHE_PROGRESS', version: '18', completed: 9, total: 20, percent: 45 } });
+  harness.serviceWorkers.dispatch('message', { source: installing, data: { type: 'CACHE_PROGRESS', version: '19', completed: 9, total: 20, percent: 45 } });
   assert.equal(harness.elements.updateMessage.textContent, 'Updating app… 45%');
   assert.equal(harness.elements.updateProgress.attributes.get('aria-valuetext'), '9 of 20 files cached');
   assert.equal(harness.elements.applyUpdate.hidden, true);
@@ -193,7 +193,7 @@ test('a failed install reports failure without activating or discarding the curr
   const installing = new EventTargetMock();
   harness.registration.installing = installing;
   harness.registration.dispatch('updatefound');
-  harness.serviceWorkers.dispatch('message', { source: installing, data: { type: 'CACHE_ERROR', version: '18' } });
+  harness.serviceWorkers.dispatch('message', { source: installing, data: { type: 'CACHE_ERROR', version: '19' } });
   assert.equal(harness.elements.updateMessage.textContent, 'Update failed. Using the current version.');
   assert.equal(harness.serviceWorkers.controller, activeController);
   assert.equal(harness.reloads(), 0);
@@ -207,4 +207,15 @@ test('About the Event presents J.R. responsively and offline', () => {
   assert.match(styles, /\.about\{display:grid;grid-template-columns:/);
   assert.match(styles, /\.about-portrait img\{[^}]*width:100%[^}]*height:auto[^}]*object-fit:contain/);
   assert.match(styles, /@media\(max-width:650px\).*\.about\{grid-template-columns:1fr/);
+});
+
+test('leaderboard progress uses team colors with deterministic score contrast', () => {
+  assert.match(app, /setProperty\('--team-color',team\.color\)/);
+  assert.match(app, /contrastingTextColor\(team\.color\)/);
+  assert.match(app, /labels:\[score,filledScore\]/);
+  assert.match(app, /--progress-remaining/);
+  assert.match(styles, /\.progress-fill\{[^}]*background:var\(--team-color\)/);
+  assert.match(styles, /\.score-label\{[^}]*font-size:clamp\(\.9rem,2\.2vw,1rem\)[^}]*font-weight:900/);
+  assert.match(styles, /\.score-label-filled\{[^}]*color:var\(--fill-label-color\)[^}]*clip-path:inset\(0 var\(--progress-remaining,100%\) 0 0\)/);
+  assert.doesNotMatch(styles, /mix-blend-mode/);
 });
