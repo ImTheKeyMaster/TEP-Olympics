@@ -74,6 +74,8 @@ export function registerPwaUpdate({
     if (reloadRequested) return;
     reloadRequested = true;
     clearTimeout(activationFallback);
+    activatingWorker?.removeEventListener?.('statechange', activationStateChanged);
+    activatingWorker = null;
     // Clear the old-version UI before navigating. This also prevents a
     // briefly restored Chrome tab from repainting a stale ready notification.
     notice.hidden = true;
@@ -91,6 +93,7 @@ export function registerPwaUpdate({
   function activationStateChanged() {
     if (activatingWorker?.state === 'redundant') {
       applying = false;
+      activatingWorker.removeEventListener?.('statechange', activationStateChanged);
       activatingWorker = null;
       clearTimeout(activationFallback);
       showFailure('Update installation failed. Using the current version.');
@@ -144,6 +147,7 @@ export function registerPwaUpdate({
     } catch (error) {
       console.warn('Unable to activate the service worker update:', error);
       applying = false;
+      activatingWorker.removeEventListener?.('statechange', activationStateChanged);
       activatingWorker = null;
       showFailure('Unable to install the update. Please try again later.');
       return;

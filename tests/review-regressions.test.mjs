@@ -12,6 +12,7 @@ const { registerPwaUpdate } = await import(`data:text/javascript;base64,${Buffer
 class EventTargetMock {
   listeners = new Map();
   addEventListener(type, listener) { this.listeners.set(type, [...(this.listeners.get(type) || []), listener]); }
+  removeEventListener(type, listener) { this.listeners.set(type, (this.listeners.get(type) || []).filter(item => item !== listener)); }
   dispatch(type, event = {}) { for (const listener of this.listeners.get(type) || []) listener(event); }
 }
 
@@ -101,6 +102,7 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /touch-action:pan-x pan-y pinch-zoom/);
   assert.match(styles, /\.objectives-viewer-image-wrap\{[^}]*width:max-content[^}]*height:max-content[^}]*min-width:100%[^}]*min-height:100%/);
   assert.match(app, /addEventListener\('resize',\(\)=>\{if\(viewer\.open\)applyZoom/);
+  assert.match(app, /if\(\$\('objectivesViewer'\)\.open\)\$\('objectivesViewer'\)\.close\(\)/);
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
@@ -179,6 +181,9 @@ test('Chrome tab only reloads after the selected update controls it', async () =
   waiting.dispatch('statechange');
   assert.equal(harness.elements.updateNotice.hidden, true);
   assert.equal(harness.reloads(), 1);
+  waiting.state = 'redundant';
+  waiting.dispatch('statechange');
+  assert.equal(harness.elements.updateNotice.hidden, true);
 });
 
 test('a waiting worker that becomes redundant exits the installing state', async () => {
