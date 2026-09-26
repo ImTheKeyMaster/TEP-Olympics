@@ -7,6 +7,7 @@ const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const worker = await readFile(new URL('../service-worker.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 const pwaUpdate = await readFile(new URL('../pwa-update.js', import.meta.url), 'utf8');
+const rosters = JSON.parse(await readFile(new URL('../data/rosters.json', import.meta.url), 'utf8'));
 const { registerPwaUpdate } = await import(`data:text/javascript;base64,${Buffer.from(pwaUpdate).toString('base64')}`);
 
 class EventTargetMock {
@@ -71,7 +72,7 @@ test('navigation contains the application destinations in order', () => {
   assert.doesNotMatch(html, /refreshButton|↻ Refresh/);
   assert.doesNotMatch(app, /refreshButton/);
   assert.doesNotMatch(html, /installButton|Install App/);
-  assert.deepEqual([...html.matchAll(/data-route="([^"]+)"/g)].map(match => match[1]), ['leaderboard', 'objectives', 'admin', 'about']);
+  assert.deepEqual([...html.matchAll(/data-route="([^"]+)"/g)].map(match => match[1]), ['leaderboard', 'objectives', 'rosters', 'admin', 'about']);
   assert.match(app, /onSnapshot\(collection\(db,'teams'\)/);
   assert.match(app, /onSnapshot\(doc\(db,'settings','leaderboard'\)/);
 });
@@ -92,7 +93,7 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(html, /id="closeObjectivesViewer"[^>]*aria-label="Close fullscreen objectives viewer"/);
   assert.doesNotMatch(html, /href="images\/Objectives\.png"[^>]*target="_blank"/);
   assert.match(html, /alt="TEP Scavenger Hunt Objectives"/);
-  assert.match(app, /'leaderboard','objectives','admin','about'/);
+  assert.match(app, /'leaderboard','objectives','rosters','admin','about'/);
   assert.match(worker, /'\.\/images\/Objectives\.png'/);
   assert.match(styles, /\.objectives-image\{[^}]*width:100%[^}]*max-width:1427px[^}]*height:auto[^}]*object-fit:contain/);
   assert.match(styles, /@media\(max-width:650px\).*\.objectives-hint\{display:block/);
@@ -106,10 +107,47 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
-  assert.match(app, /const APP_VERSION = '21'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '21'/);
-  assert.match(html, /styles\.css\?v=21/);
-  assert.match(html, /app\.js\?v=21/);
+  assert.match(app, /const APP_VERSION = '25'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '25'/);
+  assert.match(html, /styles\.css\?v=25/);
+  assert.match(html, /app\.js\?v=25/);
+});
+
+test('Team Rosters is routed, sorted in the app, themed from live teams, and available offline', () => {
+  assert.match(html, /href="#rosters" data-route="rosters">👥 Team Rosters<\/a>/);
+  assert.match(html, /id="rostersScreen"[^>]*aria-labelledby="rostersTitle"/);
+  assert.match(html, /id="rostersTitle">Team Rosters<\/h1>/);
+  assert.match(html, /href="#leaderboard" aria-label="Return to leaderboard">×<\/a>/);
+  assert.match(app, /fetch\('data\/rosters\.json'\)/);
+  assert.match(app, /function validRosterData\(value\)/);
+  assert.match(app, /rosterLoadState==='error'/);
+  assert.match(app, /catch\(error\)\{console\.warn\('Roster data failed:',error\);rosterLoadState='error'\}\s*renderRosters\(\)/);
+  assert.match(app, /\[\.\.\.rosters\.teams\]\.sort\(\(a,b\)=>a\.name\.localeCompare/);
+  assert.match(app, /\[\.\.\.rosterTeam\.members\]\.sort\(\(a,b\)=>a\.lastName\.localeCompare/);
+  assert.match(app, /team\.id === rosterTeam\.teamId/);
+  assert.match(app, /rosterTeamAppearance\(rosterTeam\)/);
+  assert.match(app, /team\?\.color/);
+  assert.match(app, /safeIconUrl\(team\?\.iconUrl\)/);
+  assert.match(app, /renderRosters\(\);\s*if\(currentUser/);
+  assert.match(app, /data=await loadPublished\(\);renderLeaderboard\(\);renderRosters\(\)/);
+  assert.match(worker, /'\.\/data\/rosters\.json'/);
+  assert.deepEqual([...rosters.teams].sort((a,b)=>a.name.localeCompare(b.name)).map(team=>team.name), ['Emeralds','Lamps','Pearls','Plumes','Swords']);
+  assert.deepEqual(rosters.teams.map(team=>team.teamId).sort(), ['placeholder-emeralds','placeholder-lamps','placeholder-pearls','placeholder-plumes','placeholder-swords']);
+  const expectedLastNames = {
+    Emeralds: ['Aller','Aukamp','Brown','Gordon','Klugman','Koff','Mitchell','Rogers','Warren'],
+    Lamps: ['Averbukh','Barron','Difalco','Gaglione','Herman','Jordan','Kaiser','Moretti'],
+    Pearls: ['Amaral','Butler','Fischer','Hacker','Hawthorn','Hildebrant','Rappaport','Sponzo','Yenuganti'],
+    Plumes: ['Baez','Buckley','Figueroa','Gresser','Loiselle','McNally','McVeigh','Schonfeld','Ten-Ami'],
+    Swords: ['Arbesfeld','Demasi','Hoyos','Hurley','Kirshbaum','LaRusso',"O'Neill",'Siden','Spolansky']
+  };
+  for (const team of rosters.teams) {
+    const sortedMembers=[...team.members].sort((a,b)=>a.lastName.localeCompare(b.lastName)||a.firstName.localeCompare(b.firstName));
+    assert.deepEqual(sortedMembers.map(member=>member.lastName), expectedLastNames[team.name]);
+  }
+  assert.deepEqual(rosters.teams.flatMap(team=>team.members).find(member=>member.lastName==="O'Neill"), { firstName:'Brandon', lastName:"O'Neill", chapter:'Rho' });
+  assert.deepEqual(rosters.teams.flatMap(team=>team.members).find(member=>member.lastName==='Ten-Ami'), { firstName:'Ethan', lastName:'Ten-Ami', chapter:'Gamma Tau' });
+  assert.match(app, /Last Name<\/th><th scope="col">First Name<\/th><th scope="col">Chapter/);
+  assert.doesNotMatch(JSON.stringify(rosters), /email|gmail|score/i);
 });
 
 test('update progress reports completed cache operations and gates reload', () => {

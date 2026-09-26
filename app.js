@@ -5,7 +5,7 @@ import { registerPwaUpdate } from './pwa-update.js';
 
 (() => {
   'use strict';
-  const APP_VERSION = '21';
+  const APP_VERSION = '25';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -40,6 +40,7 @@ import { registerPwaUpdate } from './pwa-update.js';
   ];
   const $ = id => document.getElementById(id);
   let data = { maximumScore: 100, updatedAt: new Date().toISOString(), teams: [] };
+  let rosters = null, rosterLoadState = 'loading';
   let toastTimer, currentUser = null;
   let teamSnapshot = null, settingsSnapshot = null, unsubscribeTeams = null, unsubscribeSettings = null;
   let hasServerBackedSnapshot = false, fallbackLoadPromise = null, appliedDataFingerprint = '', adminRefreshPending = false;
@@ -156,6 +157,45 @@ import { registerPwaUpdate } from './pwa-update.js';
     revealState.displayedScores.clear(); revealState.targetScores.clear();
     teams.forEach((team,index)=>{revealState.displayedScores.set(team.id,0);revealState.targetScores.set(team.id,team.score);list.append(createLeaderboardRow(team))});
     $('emptyState').hidden=teams.length>0; $('teamCount').textContent=`${teams.length} ${teams.length===1?'team':'teams'}`; $('updatedAt').dateTime=data.updatedAt; $('updatedAt').textContent=formatDate(data.updatedAt);
+  }
+
+  function rosterTeamAppearance(rosterTeam) {
+    return data.teams.find(team => team.id === rosterTeam.teamId)
+      || data.teams.find(team => team.name.localeCompare(rosterTeam.name, undefined, { sensitivity: 'base' }) === 0);
+  }
+  function renderRosters() {
+    const container=$('rosterTeams');
+    if(!rosters){container.innerHTML=`<p class="rosters-status">${rosterLoadState==='error'?'Team rosters are currently unavailable.':'Loading team rosters…'}</p>`;return}
+    container.replaceChildren();
+    [...rosters.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'})).forEach(rosterTeam=>{
+      const team=rosterTeamAppearance(rosterTeam);
+      const card=document.createElement('section');card.className='roster-card';card.style.setProperty('--team-color',team?.color||'#35135f');
+      const heading=document.createElement('h2');heading.className='roster-team-heading';
+      const icon=document.createElement('img');icon.className='roster-team-icon';icon.alt='';icon.loading='lazy';icon.referrerPolicy='no-referrer';icon.src=safeIconUrl(team?.iconUrl)||FALLBACK_ICON;icon.addEventListener('error',()=>{if(!icon.src.endsWith(FALLBACK_ICON))icon.src=FALLBACK_ICON},{once:true});
+      const name=document.createElement('span');name.textContent=team?.name||rosterTeam.name;heading.append(icon,name);
+      const table=document.createElement('table');table.className='roster-table';
+      const head=document.createElement('thead');head.innerHTML='<tr><th scope="col">Last Name</th><th scope="col">First Name</th><th scope="col">Chapter</th></tr>';
+      const body=document.createElement('tbody');
+      [...rosterTeam.members].sort((a,b)=>a.lastName.localeCompare(b.lastName,undefined,{sensitivity:'base'})||a.firstName.localeCompare(b.firstName,undefined,{sensitivity:'base'})).forEach(member=>{const row=document.createElement('tr');[member.lastName,member.firstName,member.chapter].forEach(value=>{const cell=document.createElement('td');cell.textContent=value;row.append(cell)});body.append(row)});
+      table.append(head,body);card.append(heading,table);container.append(card);
+    });
+  }
+  function validRosterData(value) {
+    if(!Array.isArray(value?.teams)||!value.teams.length)return false;
+    const teamIds=new Set(),teamNames=new Set();
+    return value.teams.every(team => {
+      if(typeof team?.teamId!=='string'||!team.teamId.trim()||typeof team.name!=='string'||!team.name.trim())return false;
+      const normalizedName=team.name.toLocaleLowerCase();
+      if(teamIds.has(team.teamId)||teamNames.has(normalizedName))return false;
+      teamIds.add(team.teamId);teamNames.add(normalizedName);
+      return Array.isArray(team.members) && team.members.every(member =>
+        ['firstName','lastName','chapter'].every(field => typeof member?.[field]==='string' && member[field].trim()));
+    });
+  }
+  async function loadRosters() {
+    try{const response=await fetch('data/rosters.json');if(!response.ok)throw new Error('Roster data unavailable');const value=await response.json();if(!validRosterData(value))throw new Error('Roster data is invalid');rosters=value;rosterLoadState='ready'}
+    catch(error){console.warn('Roster data failed:',error);rosterLoadState='error'}
+    renderRosters();
   }
 
   function reorderRevealRows(teams,now=performance.now(),animate=false) {
@@ -382,7 +422,7 @@ import { registerPwaUpdate } from './pwa-update.js';
   }
   async function showPublishedFallback() {
     if(fallbackLoadPromise)return fallbackLoadPromise;
-    fallbackLoadPromise=(async()=>{try{const published=await loadPublished();if(!firestoreSnapshotsAreEmptyCache())return;data=published;appliedDataFingerprint=dataFingerprint(published);if(revealState.status!=='idle')cancelReveal();else renderLeaderboard();if(currentUser&&location.hash==='#admin')renderAdmin();$('connectionStatus').textContent='Offline fallback'}catch(error){console.warn('Published fallback failed:',error)}})();
+    fallbackLoadPromise=(async()=>{try{const published=await loadPublished();if(!firestoreSnapshotsAreEmptyCache())return;data=published;appliedDataFingerprint=dataFingerprint(published);if(revealState.status!=='idle')cancelReveal();else renderLeaderboard();renderRosters();if(currentUser&&location.hash==='#admin')renderAdmin();$('connectionStatus').textContent='Offline fallback'}catch(error){console.warn('Published fallback failed:',error)}})();
     try{await fallbackLoadPromise}finally{fallbackLoadPromise=null}
   }
   function applyRealtimeData() {
@@ -399,6 +439,7 @@ import { registerPwaUpdate } from './pwa-update.js';
     if(fingerprint===appliedDataFingerprint)return;
     appliedDataFingerprint=fingerprint;data=result.data;
     if(revealState.status!=='idle')cancelReveal();else renderLeaderboard();
+    renderRosters();
     if(currentUser&&location.hash==='#admin')renderAdmin();
   }
   function listenForLeaderboard() {
@@ -407,10 +448,10 @@ import { registerPwaUpdate } from './pwa-update.js';
   }
   async function handleReadError(error) {
     console.warn('Firestore listener failed:',error); announce('The live leaderboard is unavailable. Showing the last available data.',true);
-    if(!data.teams.length)try{data=await loadPublished();renderLeaderboard()}catch(loadError){console.warn('Fallback data failed:',loadError)}
+    if(!data.teams.length)try{data=await loadPublished();renderLeaderboard();renderRosters()}catch(loadError){console.warn('Fallback data failed:',loadError)}
   }
 
-  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','objectives','admin','about'].includes(name))name='leaderboard'; if($('objectivesViewer').open)$('objectivesViewer').close(); cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
+  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','objectives','rosters','admin','about'].includes(name))name='leaderboard'; if($('objectivesViewer').open)$('objectivesViewer').close(); cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
   function openMenu(){ $('drawer').classList.add('open');$('drawer').setAttribute('aria-hidden','false');$('menuButton').setAttribute('aria-expanded','true');$('scrim').hidden=false;$('closeMenu').focus() }
   function closeMenu(){ $('drawer').classList.remove('open');$('drawer').setAttribute('aria-hidden','true');$('menuButton').setAttribute('aria-expanded','false');$('scrim').hidden=true }
   function confirmAction(title,message){return new Promise(resolve=>{const dialog=$('confirmDialog');$('dialogTitle').textContent=title;$('dialogMessage').textContent=message;dialog.showModal();dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true})})}
@@ -439,6 +480,6 @@ import { registerPwaUpdate } from './pwa-update.js';
     $('addTeam').onclick=()=>{const color=nextTeamColor(data.teams);if(!color){announce(`The ${TEAM_COLOR_PALETTE.length}-team color palette is full.`,true);return}const id=newId();data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,color,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
     addEventListener('online',()=>announce('Back online. Live updates resumed.'));addEventListener('offline',()=>announce('You are offline. Showing cached leaderboard data.',true));
   }
-  async function init(){console.log(`[TEP Olympics] App version ${APP_VERSION}`);bindEvents();renderLeaderboard();listenForLeaderboard();onAuthStateChanged(auth,user=>{currentUser=user;route()});route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerPwaUpdate()}
+  async function init(){console.log(`[TEP Olympics] App version ${APP_VERSION}`);bindEvents();renderLeaderboard();loadRosters();listenForLeaderboard();onAuthStateChanged(auth,user=>{currentUser=user;route()});route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerPwaUpdate()}
   init().catch(error=>{console.error(error);announce('The app encountered an unexpected error.',true)});
 })();
