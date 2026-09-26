@@ -1,4 +1,4 @@
-const DEPLOYMENT_VERSION = '19';
+const DEPLOYMENT_VERSION = '20';
 const CACHE_NAME = `tep-hunt-v${DEPLOYMENT_VERSION}`;
 const SHELL = ['./', './index.html', `./styles.css?v=${DEPLOYMENT_VERSION}`, `./app.js?v=${DEPLOYMENT_VERSION}`, './pwa-update.js', './manifest.webmanifest', './data/teams.json', './images/Objectives.png', './images/JR.jpg', './icons/app-icon.svg', './icons/Emeralds.png', './icons/lamp.png', './icons/open-book.png', './icons/pearls.png', './icons/scroll.png', './icons/star.png', './icons/sword.png', './icons/three-plumes.png', './icons/torch.png'];
 const FIREBASE_MODULES = [
