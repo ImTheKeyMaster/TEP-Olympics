@@ -5,7 +5,7 @@ import { registerPwaUpdate } from './pwa-update.js';
 
 (() => {
   'use strict';
-  const APP_VERSION = '23';
+  const APP_VERSION = '24';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -159,15 +159,16 @@ import { registerPwaUpdate } from './pwa-update.js';
     $('emptyState').hidden=teams.length>0; $('teamCount').textContent=`${teams.length} ${teams.length===1?'team':'teams'}`; $('updatedAt').dateTime=data.updatedAt; $('updatedAt').textContent=formatDate(data.updatedAt);
   }
 
-  function rosterTeamAppearance(teamName) {
-    return data.teams.find(team => team.name.localeCompare(teamName, undefined, { sensitivity: 'base' }) === 0);
+  function rosterTeamAppearance(rosterTeam) {
+    return data.teams.find(team => team.id === rosterTeam.teamId)
+      || data.teams.find(team => team.name.localeCompare(rosterTeam.name, undefined, { sensitivity: 'base' }) === 0);
   }
   function renderRosters() {
     const container=$('rosterTeams');
     if(!rosters){container.innerHTML='<p class="rosters-status">Loading team rosters…</p>';return}
     container.replaceChildren();
     [...rosters.teams].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'})).forEach(rosterTeam=>{
-      const team=rosterTeamAppearance(rosterTeam.name);
+      const team=rosterTeamAppearance(rosterTeam);
       const card=document.createElement('section');card.className='roster-card';card.style.setProperty('--team-color',team?.color||'#35135f');
       const heading=document.createElement('h2');heading.className='roster-team-heading';
       const icon=document.createElement('img');icon.className='roster-team-icon';icon.alt='';icon.loading='lazy';icon.referrerPolicy='no-referrer';icon.src=safeIconUrl(team?.iconUrl)||FALLBACK_ICON;icon.addEventListener('error',()=>{if(!icon.src.endsWith(FALLBACK_ICON))icon.src=FALLBACK_ICON},{once:true});
@@ -179,8 +180,14 @@ import { registerPwaUpdate } from './pwa-update.js';
       table.append(head,body);card.append(heading,table);container.append(card);
     });
   }
+  function validRosterData(value) {
+    return Array.isArray(value?.teams) && value.teams.every(team =>
+      typeof team?.teamId==='string' && team.teamId.trim() && typeof team.name==='string' && team.name.trim()
+      && Array.isArray(team.members) && team.members.every(member =>
+        ['firstName','lastName','chapter'].every(field => typeof member?.[field]==='string' && member[field].trim())));
+  }
   async function loadRosters() {
-    try{const response=await fetch('data/rosters.json');if(!response.ok)throw new Error('Roster data unavailable');const value=await response.json();if(!Array.isArray(value.teams))throw new Error('Roster data is invalid');rosters=value;renderRosters()}
+    try{const response=await fetch('data/rosters.json');if(!response.ok)throw new Error('Roster data unavailable');const value=await response.json();if(!validRosterData(value))throw new Error('Roster data is invalid');rosters=value;renderRosters()}
     catch(error){console.warn('Roster data failed:',error);$('rosterTeams').innerHTML='<p class="rosters-status">Team rosters are currently unavailable.</p>'}
   }
 

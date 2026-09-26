@@ -1,6 +1,7 @@
 {
   "teams": [
     {
+      "teamId": "placeholder-emeralds",
       "name": "Emeralds",
       "members": [
         { "firstName": "Jack", "lastName": "Aller", "chapter": "Epsilon Phi" },
@@ -15,6 +16,7 @@
       ]
     },
     {
+      "teamId": "placeholder-pearls",
       "name": "Pearls",
       "members": [
         { "firstName": "Venkata", "lastName": "Yenuganti", "chapter": "Rho" },
@@ -29,6 +31,7 @@
       ]
     },
     {
+      "teamId": "placeholder-plumes",
       "name": "Plumes",
       "members": [
         { "firstName": "Matthew", "lastName": "Gresser", "chapter": "Tau Delta" },
@@ -43,6 +46,7 @@
       ]
     },
     {
+      "teamId": "placeholder-swords",
       "name": "Swords",
       "members": [
         { "firstName": "Danny", "lastName": "Spolansky", "chapter": "Gamma Tau" },
@@ -57,6 +61,7 @@
       ]
     },
     {
+      "teamId": "placeholder-lamps",
       "name": "Lamps",
       "members": [
         { "firstName": "Jaden", "lastName": "Kaiser", "chapter": "Tau Alpha" },

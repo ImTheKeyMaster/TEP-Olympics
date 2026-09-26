@@ -107,10 +107,10 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
-  assert.match(app, /const APP_VERSION = '23'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '23'/);
-  assert.match(html, /styles\.css\?v=23/);
-  assert.match(html, /app\.js\?v=23/);
+  assert.match(app, /const APP_VERSION = '24'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '24'/);
+  assert.match(html, /styles\.css\?v=24/);
+  assert.match(html, /app\.js\?v=24/);
 });
 
 test('Team Rosters is routed, sorted in the app, themed from live teams, and available offline', () => {
@@ -119,15 +119,18 @@ test('Team Rosters is routed, sorted in the app, themed from live teams, and ava
   assert.match(html, /id="rostersTitle">Team Rosters<\/h1>/);
   assert.match(html, /href="#leaderboard" aria-label="Return to leaderboard">×<\/a>/);
   assert.match(app, /fetch\('data\/rosters\.json'\)/);
+  assert.match(app, /function validRosterData\(value\)/);
   assert.match(app, /\[\.\.\.rosters\.teams\]\.sort\(\(a,b\)=>a\.name\.localeCompare/);
   assert.match(app, /\[\.\.\.rosterTeam\.members\]\.sort\(\(a,b\)=>a\.lastName\.localeCompare/);
-  assert.match(app, /rosterTeamAppearance\(rosterTeam\.name\)/);
+  assert.match(app, /team\.id === rosterTeam\.teamId/);
+  assert.match(app, /rosterTeamAppearance\(rosterTeam\)/);
   assert.match(app, /team\?\.color/);
   assert.match(app, /safeIconUrl\(team\?\.iconUrl\)/);
   assert.match(app, /renderRosters\(\);\s*if\(currentUser/);
   assert.match(app, /data=await loadPublished\(\);renderLeaderboard\(\);renderRosters\(\)/);
   assert.match(worker, /'\.\/data\/rosters\.json'/);
   assert.deepEqual([...rosters.teams].sort((a,b)=>a.name.localeCompare(b.name)).map(team=>team.name), ['Emeralds','Lamps','Pearls','Plumes','Swords']);
+  assert.deepEqual(rosters.teams.map(team=>team.teamId).sort(), ['placeholder-emeralds','placeholder-lamps','placeholder-pearls','placeholder-plumes','placeholder-swords']);
   const expectedLastNames = {
     Emeralds: ['Aller','Aukamp','Brown','Gordon','Klugman','Koff','Mitchell','Rogers','Warren'],
     Lamps: ['Averbukh','Barron','Difalco','Gaglione','Herman','Jordan','Kaiser','Moretti'],
