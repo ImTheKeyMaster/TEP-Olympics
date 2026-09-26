@@ -4,7 +4,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
 
 (() => {
   'use strict';
-  const APP_VERSION = '13';
+  const APP_VERSION = '14';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',

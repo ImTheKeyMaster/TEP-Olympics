@@ -8,7 +8,7 @@
   <title>2026 Grand Chapter Scavenger Hunt</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/app-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
   <header class="topbar">
@@ -61,11 +61,26 @@
       <div class="panel"><div class="section-heading"><div><h2>Teams</h2><p>Edit competitors and scores.</p></div><button id="addTeam" class="primary">+ Add team</button></div><div id="teamEditor" class="team-editor"></div></div>
     </section>
 
-    <section id="aboutScreen" class="screen narrow" hidden aria-labelledby="aboutTitle"><div class="panel about"><p class="eyebrow">About the event</p><h1 id="aboutTitle">A race to the finish</h1><p>Follow the 2026 Grand Chapter Scavenger Hunt as teams compete for the top spot. Target scores update live from the shared leaderboard and remain hidden until Reveal.</p><p>Install this app to keep the leaderboard handy and available offline.</p><a class="primary button-link" href="#leaderboard">View leaderboard</a></div></section>
+    <section id="aboutScreen" class="screen about-screen" hidden aria-labelledby="aboutTitle">
+      <div class="panel about">
+        <div class="about-copy">
+          <p class="eyebrow">About the event</p>
+          <h1 id="aboutTitle">About the Event</h1>
+          <p>The TEP Scavenger Hunt is the brainchild of outgoing National Consul <strong>J.R. Benning</strong>, who, after years of meetings, budgets, bylaws, expansion plans, appeals, and other activities traditionally associated with responsible fraternity leadership, decided his legacy should instead involve grown men forming human pyramids, singing karaoke, body surfing, and posing like mermaids.</p>
+          <p>With his term rapidly approaching its conclusion, J.R. recognized the strategic advantage of launching an event for which <strong>his successor will ultimately have to answer</strong>.</p>
+          <p>The rules are simple: complete the challenges, document the evidence, collect the points, and try to maintain what little dignity you brought aboard.</p>
+          <p>J.R. accepts full credit for the idea, limited responsibility for its execution, and absolutely no liability for the photographs.</p>
+          <p class="about-signoff"><strong>Consider it his parting gift to the Fraternity.</strong></p>
+        </div>
+        <figure class="about-portrait">
+          <img src="images/JR.jpg" alt="J.R. Benning, outgoing National Consul">
+        </figure>
+      </div>
+    </section>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="updateNotice" class="update-notice" hidden><span>A new app version is ready.</span><button id="applyUpdate">Reload</button></div>
   <dialog id="confirmDialog"><form method="dialog"><h2 id="dialogTitle">Confirm action</h2><p id="dialogMessage"></p><div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button value="confirm" class="danger">Confirm</button></div></form></dialog>
-  <script type="module" src="app.js?v=13"></script>
+  <script type="module" src="app.js?v=14"></script>
 </body>
 </html>
