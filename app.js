@@ -5,7 +5,7 @@ import { registerPwaUpdate } from './pwa-update.js';
 
 (() => {
   'use strict';
-  const APP_VERSION = '20';
+  const APP_VERSION = '21';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -26,6 +26,7 @@ import { registerPwaUpdate } from './pwa-update.js';
     '#be185d', '#1e3a8a', '#166534', '#9a3412',
     '#0e7490', '#4338ca', '#7f1d1d', '#0f6f72'
   ];
+  const TEAM_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
   const AVAILABLE_TEAM_ICONS = [
     { path: 'icons/lamp.png', label: 'Lamp' },
     { path: 'icons/Emeralds.png', label: 'Emeralds' },
@@ -63,7 +64,7 @@ import { registerPwaUpdate } from './pwa-update.js';
   }
 
   function nextTeamColor(teams) {
-    const used=new Set(teams.map(team=>team.color).filter(color=>TEAM_COLOR_PALETTE.includes(color)));
+    const used=new Set(teams.map(team=>typeof team.color==='string'?team.color.toLowerCase():'').filter(color=>TEAM_COLOR_PALETTE.includes(color)));
     return TEAM_COLOR_PALETTE.find(color=>!used.has(color)) || '';
   }
 
@@ -85,11 +86,9 @@ import { registerPwaUpdate } from './pwa-update.js';
       else if (names.has(name.toLocaleLowerCase())) errors.push(`Team name “${name}” is duplicated.`); else names.add(name.toLocaleLowerCase());
       if (!Number.isFinite(score) || score < 0) errors.push(`Score for ${name || `team ${index + 1}`} must be zero or greater.`);
       if (iconUrl && !safeIconUrl(iconUrl)) errors.push(`Icon URL for ${name || `team ${index + 1}`} is unsafe.`);
-      const requestedColor=typeof team.color==='string'?team.color.toLowerCase():'';
-      const color=TEAM_COLOR_PALETTE.includes(requestedColor)&&!cleanTeams.some(item=>item.color===requestedColor)
-        ? requestedColor
-        : nextTeamColor(cleanTeams);
-      if(!color)errors.push(`Team ${index + 1} cannot be assigned a unique color; the ${TEAM_COLOR_PALETTE.length}-team palette is full.`);
+      const requestedColor=typeof team.color==='string'?team.color:'';
+      const color=requestedColor;
+      if(!TEAM_COLOR_PATTERN.test(color))errors.push(`Team ${index + 1} needs a six-digit hexadecimal color.`);
       cleanTeams.push({ id, name, iconUrl, score, color });
     });
     const date = new Date(value.updatedAt);
@@ -311,7 +310,7 @@ import { registerPwaUpdate } from './pwa-update.js';
     if (!data.teams.length) { const p=document.createElement('p'); p.className='empty-state'; p.textContent='No teams. Add one to get started.'; editor.append(p); }
   }
   function createTeamEditor(team) {
-    const card=document.createElement('form'); card.className='team-edit-card'; card.noValidate=true; card.dataset.id=team.id; card.dataset.color=team.color; card.dataset.order=String(data.teams.findIndex(item=>item.id===team.id)); card.dataset.dirty=team._isNew?'true':'false';
+    const card=document.createElement('form'); card.className='team-edit-card'; card.noValidate=true; card.dataset.id=team.id; card.dataset.order=String(data.teams.findIndex(item=>item.id===team.id)); card.dataset.dirty=team._isNew?'true':'false';
     const grid=document.createElement('div'); grid.className='team-edit-grid';
     const field=(label,type,value,kind) => { const wrap=document.createElement('div'), lab=document.createElement('label'), input=document.createElement('input'), err=document.createElement('p'); lab.textContent=label; input.type=type; input.value=value; input.dataset.field=kind; input.id=`${kind}-${team.id}`; lab.htmlFor=input.id; err.className='field-error'; err.dataset.error=kind; wrap.append(lab,input,err); return {wrap,input}; };
     const name=field('Team name','text',team.name,'name'), score=field('Current score','number',team.score,'score'); score.input.min='0'; score.input.step='any';
@@ -334,17 +333,26 @@ import { registerPwaUpdate } from './pwa-update.js';
     custom.append(customSummary,customField.wrap); iconField.append(iconLegend,iconHelp,iconGrid,custom);
     iconGrid.addEventListener('change',event=>{if(event.target.matches('[data-field=builtInIcon]'))customField.input.value=''});
     customField.input.addEventListener('input',()=>{if(customField.input.value)iconGrid.querySelectorAll('input[type=radio]').forEach(radio=>radio.checked=false)});
+    const colorField=document.createElement('div'); colorField.className='team-color-field';
+    const colorLabel=document.createElement('label'); colorLabel.textContent='Team Color'; colorLabel.htmlFor=`color-${team.id}`;
+    const colorInputs=document.createElement('div'); colorInputs.className='team-color-inputs';
+    const colorPicker=document.createElement('input'); colorPicker.type='color'; colorPicker.value=team.color; colorPicker.id=colorLabel.htmlFor; colorPicker.dataset.field='colorPicker'; colorPicker.setAttribute('aria-label',`${team.name} color picker`);
+    const colorHex=document.createElement('input'); colorHex.type='text'; colorHex.value=team.color; colorHex.dataset.field='color'; colorHex.setAttribute('aria-label',`${team.name} hexadecimal color`); colorHex.setAttribute('aria-describedby',`color-error-${team.id}`); colorHex.setAttribute('autocomplete','off'); colorHex.setAttribute('spellcheck','false'); colorHex.pattern='^#[0-9a-fA-F]{6}$'; colorHex.maxLength=7; colorHex.placeholder='#5B32D6';
+    const colorError=document.createElement('p'); colorError.className='field-error'; colorError.dataset.error='color'; colorError.id=`color-error-${team.id}`;
+    colorPicker.addEventListener('input',()=>{colorHex.value=colorPicker.value});
+    colorHex.addEventListener('input',()=>{if(TEAM_COLOR_PATTERN.test(colorHex.value))colorPicker.value=colorHex.value});
+    colorInputs.append(colorPicker,colorHex); colorField.append(colorLabel,colorInputs,colorError);
     const scoreRow=document.createElement('div'); scoreRow.className='score-input'; const minus=document.createElement('button'); minus.type='button'; minus.textContent='−1'; minus.setAttribute('aria-label',`Subtract one point from ${team.name}`); const plus=document.createElement('button'); plus.type='button'; plus.textContent='+1'; plus.setAttribute('aria-label',`Add one point to ${team.name}`); score.input.parentNode?.removeChild(score.input); scoreRow.append(minus,score.input,plus); score.wrap.insertBefore(scoreRow,score.wrap.querySelector('.field-error'));
     minus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?Math.max(0,n-1):0;card.dataset.dirty='true'}; plus.onclick=()=>{const n=Number(score.input.value); score.input.value=Number.isFinite(n)?n+1:1;card.dataset.dirty='true'};
     grid.append(name.wrap,score.wrap); const actions=document.createElement('div'); actions.className='team-actions';
-    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);card.dataset.dirty='false';renderAdmin(true)}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team,card); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(grid,iconField,actions); card.addEventListener('input',()=>card.dataset.dirty='true'); card.addEventListener('change',()=>card.dataset.dirty='true'); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
+    const cancel=document.createElement('button'); cancel.type='button'; cancel.className='secondary'; cancel.textContent='Cancel'; cancel.onclick=()=>{if(team._isNew)data.teams=data.teams.filter(item=>item.id!==team.id);card.dataset.dirty='false';renderAdmin(true)}; const remove=document.createElement('button'); remove.type='button'; remove.className='danger'; remove.textContent='Remove'; remove.onclick=()=>removeTeam(team,card); const save=document.createElement('button'); save.type='submit'; save.className='primary'; save.textContent='Save changes'; actions.append(cancel,remove,save); card.append(grid,iconField,colorField,actions); card.addEventListener('input',()=>card.dataset.dirty='true'); card.addEventListener('change',()=>card.dataset.dirty='true'); card.addEventListener('submit',event=>saveTeam(event,team.id)); return card;
   }
   async function saveTeam(event,id) {
     event.preventDefault(); const form=event.currentTarget, button=form.querySelector('[type=submit]'); if(button.disabled)return; button.disabled=true;
-    form.querySelectorAll('.field-error').forEach(e=>e.textContent=''); const name=form.querySelector('[data-field=name]').value.trim(), selectedIcon=form.querySelector('[data-field=builtInIcon]:checked'), customIcon=form.querySelector('[data-field=iconUrl]').value.trim(), iconUrl=normalizeIconUrl(selectedIcon?.value || customIcon), raw=form.querySelector('[data-field=score]').value, score=Number(raw); let valid=true;
-    const error=(field,msg)=>{form.querySelector(`[data-error=${field}]`).textContent=msg;valid=false}; if(!name)error('name','A team name is required.'); if(data.teams.some(t=>t.id!==id&&t.name.toLowerCase()===name.toLowerCase()))error('name','Team names must be unique.'); if(raw.trim()===''||!Number.isFinite(score)||score<0)error('score','Enter a score of zero or greater.'); if(iconUrl&&!safeIconUrl(iconUrl))error('iconUrl','Use an http(s) URL or safe relative path.');
+    form.querySelectorAll('.field-error').forEach(e=>e.textContent=''); const name=form.querySelector('[data-field=name]').value.trim(), selectedIcon=form.querySelector('[data-field=builtInIcon]:checked'), customIcon=form.querySelector('[data-field=iconUrl]').value.trim(), iconUrl=normalizeIconUrl(selectedIcon?.value || customIcon), raw=form.querySelector('[data-field=score]').value, score=Number(raw), color=form.querySelector('[data-field=color]').value.trim(); let valid=true;
+    const error=(field,msg)=>{form.querySelector(`[data-error=${field}]`).textContent=msg;valid=false}; if(!name)error('name','A team name is required.'); if(data.teams.some(t=>t.id!==id&&t.name.toLowerCase()===name.toLowerCase()))error('name','Team names must be unique.'); if(raw.trim()===''||!Number.isFinite(score)||score<0)error('score','Enter a score of zero or greater.'); if(iconUrl&&!safeIconUrl(iconUrl))error('iconUrl','Use an http(s) URL or safe relative path.'); if(!TEAM_COLOR_PATTERN.test(color))error('color','Enter a color in the format #5B32D6.');
     if(!valid){announce('Please correct the highlighted fields.',true);button.disabled=false;return}
-    const saved={name,icon:iconUrl,score,color:form.dataset.color,order:Number(form.dataset.order),updatedAt:serverTimestamp()};
+    const saved={name,icon:iconUrl,score,color,order:Number(form.dataset.order),updatedAt:serverTimestamp()};
     try { const succeeded=await commitWrite(()=>{const batch=writeBatch(db);batch.set(doc(db,'teams',id),saved);batch.set(doc(db,'settings','leaderboard'),{updatedAt:serverTimestamp()},{merge:true});return batch.commit()},'Team saved.'); if(succeeded){form.dataset.dirty='false';renderAdmin()} }
     finally { button.disabled=false; }
   }

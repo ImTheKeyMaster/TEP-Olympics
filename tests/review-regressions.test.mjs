@@ -106,10 +106,10 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
-  assert.match(app, /const APP_VERSION = '20'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '20'/);
-  assert.match(html, /styles\.css\?v=20/);
-  assert.match(html, /app\.js\?v=20/);
+  assert.match(app, /const APP_VERSION = '21'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '21'/);
+  assert.match(html, /styles\.css\?v=21/);
+  assert.match(html, /app\.js\?v=21/);
 });
 
 test('update progress reports completed cache operations and gates reload', () => {
@@ -263,4 +263,22 @@ test('leaderboard progress uses team colors with deterministic score contrast', 
   assert.match(styles, /\.score-label\{[^}]*font-size:clamp\(\.9rem,2\.2vw,1rem\)[^}]*font-weight:900/);
   assert.match(styles, /\.score-label-filled\{[^}]*color:var\(--fill-label-color\)[^}]*clip-path:inset\(0 var\(--progress-remaining,100%\) 0 0\)/);
   assert.doesNotMatch(styles, /mix-blend-mode/);
+});
+
+test('Admin renders and persists synchronized team color controls', () => {
+  assert.match(app, /const TEAM_COLOR_PATTERN = \/\^#\[0-9a-fA-F\]\{6\}\$\//);
+  assert.match(app, /colorLabel\.textContent='Team Color'/);
+  assert.match(app, /colorPicker\.type='color'; colorPicker\.value=team\.color/);
+  assert.match(app, /colorHex\.type='text'; colorHex\.value=team\.color/);
+  assert.match(app, /colorHex\.pattern='\^#\[0-9a-fA-F\]\{6\}\$'/);
+  assert.match(app, /colorPicker\.addEventListener\('input',\(\)=>\{colorHex\.value=colorPicker\.value\}\)/);
+  assert.match(app, /colorHex\.addEventListener\('input',\(\)=>\{if\(TEAM_COLOR_PATTERN\.test\(colorHex\.value\)\)colorPicker\.value=colorHex\.value\}\)/);
+  assert.match(app, /card\.append\(grid,iconField,colorField,actions\)/);
+  assert.match(app, /if\(!TEAM_COLOR_PATTERN\.test\(color\)\)error\('color'/);
+  assert.match(app, /const saved=\{name,icon:iconUrl,score,color,order:/);
+  assert.match(app, /batch\.set\(doc\(db,'teams',id\),saved\)/);
+  assert.match(app, /cancel\.onclick=\(\)=>\{if\(team\._isNew\).*renderAdmin\(true\)/);
+  assert.match(app, /onSnapshot\(collection\(db,'teams'\)/);
+  assert.match(app, /li\.style\.setProperty\('--team-color',team\.color\)/);
+  assert.match(styles, /\.team-color-inputs input\[type=color\]\{[^}]*width:64px[^}]*height:46px/);
 });
