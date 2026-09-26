@@ -62,7 +62,8 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /@media\(max-width:650px\).*\.objectives-hint\{display:block/);
   assert.match(styles, /\.objectives-button\{[^}]*min-height:48px/);
   assert.match(styles, /\.objectives-close\{[^}]*width:48px[^}]*height:48px/);
-  assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:/);
+  assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
   assert.match(app, /const APP_VERSION = '17'/);
   assert.match(worker, /const DEPLOYMENT_VERSION = '17'/);
   assert.match(html, /styles\.css\?v=17/);
