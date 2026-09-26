@@ -1,10 +1,11 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache, persistentMultipleTabManager, serverTimestamp, setDoc, waitForPendingWrites, writeBatch } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import { registerPwaUpdate } from './pwa-update.js';
 
 (() => {
   'use strict';
-  const APP_VERSION = '17';
+  const APP_VERSION = '18';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -38,8 +39,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
   ];
   const $ = id => document.getElementById(id);
   let data = { maximumScore: 100, updatedAt: new Date().toISOString(), teams: [] };
-  let pendingWorker = null, toastTimer, currentUser = null;
-  const failedUpdateVersions = new Set();
+  let toastTimer, currentUser = null;
   let teamSnapshot = null, settingsSnapshot = null, unsubscribeTeams = null, unsubscribeSettings = null;
   let hasServerBackedSnapshot = false, fallbackLoadPromise = null, appliedDataFingerprint = '', adminRefreshPending = false;
   const teamRowElements = new Map();
@@ -409,12 +409,7 @@ import { collection, doc, initializeFirestore, onSnapshot, persistentLocalCache,
     $('maximumForm').onsubmit=async e=>{e.preventDefault();const raw=$('maximumScore').value,n=Number(raw);$('maximumError').textContent='';if(raw.trim()===''||!Number.isFinite(n)||n<=0){$('maximumError').textContent='Enter a number greater than zero.';announce('Maximum score is invalid.',true);return}await commitWrite(()=>setDoc(doc(db,'settings','leaderboard'),{maxScore:n,updatedAt:serverTimestamp(),schemaVersion:1},{merge:true}),'Maximum score updated.')};
     $('addTeam').onclick=()=>{const color=nextTeamColor(data.teams);if(!color){announce(`The ${TEAM_COLOR_PALETTE.length}-team color palette is full.`,true);return}const id=newId();data.teams.push({id,name:'New Team',iconUrl:AVAILABLE_TEAM_ICONS[0].path,score:0,color,_isNew:true});renderAdmin();const card=document.querySelector(`[data-id="${CSS.escape(id)}"]`);card.querySelector('[data-field=name]').select();card.scrollIntoView({behavior:'smooth',block:'center'})};
     addEventListener('online',()=>announce('Back online. Live updates resumed.'));addEventListener('offline',()=>announce('You are offline. Showing cached leaderboard data.',true));
-    $('applyUpdate').onclick=()=>{pendingWorker?.postMessage('SKIP_WAITING')};
   }
-  function registerServiceWorker(){if(!('serviceWorker'in navigator)||(location.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(location.hostname)))return;navigator.serviceWorker.addEventListener('message',event=>{if(!navigator.serviceWorker.controller||!event.data)return;const {type,version}=event.data;if(type==='CACHE_ERROR'){failedUpdateVersions.add(version);showUpdateFailure();return}if(type==='CACHE_PROGRESS'&&!failedUpdateVersions.has(version))showUpdateProgress(event.data,event.source)});navigator.serviceWorker.register('service-worker.js',{updateViaCache:'none'}).then(reg=>{if(reg.waiting)showUpdate(reg.waiting);reg.addEventListener('updatefound',()=>{const worker=reg.installing;if(navigator.serviceWorker.controller)showUpdateProgress({percent:0},worker);worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(worker);if(worker.state==='redundant'&&navigator.serviceWorker.controller)showUpdateFailure()})});reg.update().catch(error=>console.warn('Service worker update check failed:',error))}).catch(error=>console.warn('Service worker registration failed:',error));navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}
-  function showUpdateProgress(message,worker){pendingWorker=worker||pendingWorker;const percent=Math.max(0,Math.min(100,Number(message.percent)||0));$('updateMessage').textContent=`Updating app… ${percent}%`;$('updateProgress').hidden=false;$('updateProgress').setAttribute('aria-valuenow',String(percent));$('updateProgress').style.setProperty('--update-progress',percent/100);$('applyUpdate').hidden=true;$('updateNotice').hidden=false}
-  function showUpdate(worker){pendingWorker=worker;$('updateMessage').textContent='A new app version is ready.';$('updateProgress').hidden=true;$('applyUpdate').hidden=false;$('updateNotice').hidden=false}
-  function showUpdateFailure(){pendingWorker=null;$('updateMessage').textContent='Update failed. Using the current version.';$('updateProgress').hidden=true;$('applyUpdate').hidden=true;$('updateNotice').hidden=false}
-  async function init(){console.log(`[TEP Olympics] App version ${APP_VERSION}`);bindEvents();renderLeaderboard();listenForLeaderboard();onAuthStateChanged(auth,user=>{currentUser=user;route()});route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerServiceWorker()}
+  async function init(){console.log(`[TEP Olympics] App version ${APP_VERSION}`);bindEvents();renderLeaderboard();listenForLeaderboard();onAuthStateChanged(auth,user=>{currentUser=user;route()});route();announce('Scores are hidden. Activate Reveal to begin the score presentation.');registerPwaUpdate()}
   init().catch(error=>{console.error(error);announce('The app encountered an unexpected error.',true)});
 })();

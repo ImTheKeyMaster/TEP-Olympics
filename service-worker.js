@@ -1,6 +1,6 @@
-const DEPLOYMENT_VERSION = '17';
+const DEPLOYMENT_VERSION = '18';
 const CACHE_NAME = `tep-hunt-v${DEPLOYMENT_VERSION}`;
-const SHELL = ['./', './index.html', `./styles.css?v=${DEPLOYMENT_VERSION}`, `./app.js?v=${DEPLOYMENT_VERSION}`, './manifest.webmanifest', './data/teams.json', './images/Objectives.png', './images/JR.jpg', './icons/app-icon.svg', './icons/Emeralds.png', './icons/lamp.png', './icons/open-book.png', './icons/pearls.png', './icons/scroll.png', './icons/star.png', './icons/sword.png', './icons/three-plumes.png', './icons/torch.png'];
+const SHELL = ['./', './index.html', `./styles.css?v=${DEPLOYMENT_VERSION}`, `./app.js?v=${DEPLOYMENT_VERSION}`, './pwa-update.js', './manifest.webmanifest', './data/teams.json', './images/Objectives.png', './images/JR.jpg', './icons/app-icon.svg', './icons/Emeralds.png', './icons/lamp.png', './icons/open-book.png', './icons/pearls.png', './icons/scroll.png', './icons/star.png', './icons/sword.png', './icons/three-plumes.png', './icons/torch.png'];
 const FIREBASE_MODULES = [
   'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js',
@@ -90,11 +90,18 @@ self.addEventListener('install', event => event.waitUntil((async () => {
   }
 })()));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim())));
-self.addEventListener('message', event => { if (event.data === 'SKIP_WAITING') self.skipWaiting(); });
+self.addEventListener('message', event => { if (event.data === 'SKIP_WAITING') event.waitUntil(self.skipWaiting()); });
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== location.origin) {
+    // Only the Firebase SDK module graph belongs in the app-shell cache. In
+    // particular, do not hold the old worker alive by intercepting Firestore's
+    // long-lived realtime requests while a replacement worker is activating.
+    const isFirebaseModule = url.hostname === 'www.gstatic.com'
+      && url.pathname.startsWith('/firebasejs/11.10.0/')
+      && url.pathname.endsWith('.js');
+    if (!isFirebaseModule) return;
     event.respondWith(fetch(event.request).then(response => {
       const copy=response.clone(); caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy)); return response;
     }).catch(() => caches.match(event.request)));

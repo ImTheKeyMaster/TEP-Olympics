@@ -6,6 +6,38 @@ const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const worker = await readFile(new URL('../service-worker.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
+const pwaUpdate = await readFile(new URL('../pwa-update.js', import.meta.url), 'utf8');
+const { registerPwaUpdate } = await import(`data:text/javascript;base64,${Buffer.from(pwaUpdate).toString('base64')}`);
+
+class EventTargetMock {
+  listeners = new Map();
+  addEventListener(type, listener) { this.listeners.set(type, [...(this.listeners.get(type) || []), listener]); }
+  dispatch(type, event = {}) { for (const listener of this.listeners.get(type) || []) listener(event); }
+}
+
+function updateHarness() {
+  const elements = Object.fromEntries(['updateNotice', 'updateMessage', 'updateProgress', 'applyUpdate'].map(id => [id, {
+    hidden: id !== 'updateMessage', disabled: false, textContent: '', attributes: new Map(),
+    classList: { values: new Set(), add(value) { this.values.add(value); }, remove(value) { this.values.delete(value); } },
+    style: { values: new Map(), setProperty(name, value) { this.values.set(name, value); } },
+    setAttribute(name, value) { this.attributes.set(name, value); }, removeAttribute(name) { this.attributes.delete(name); },
+    target: new EventTargetMock(), addEventListener(type, listener) { this.target.addEventListener(type, listener); },
+    click() { this.target.dispatch('click'); }
+  }]));
+  const serviceWorkers = new EventTargetMock();
+  serviceWorkers.controller = { state: 'activated' };
+  const registration = new EventTargetMock();
+  registration.update = async () => {};
+  serviceWorkers.register = async () => registration;
+  let reloads = 0;
+  registerPwaUpdate({
+    navigatorObject: { serviceWorker: serviceWorkers },
+    locationObject: { protocol: 'https:', hostname: 'example.test' },
+    documentObject: { getElementById: id => elements[id] },
+    reloadPage: () => { reloads += 1; }
+  });
+  return { elements, serviceWorkers, registration, reloads: () => reloads };
+}
 
 test('service worker precaches the complete Firebase module graph', () => {
   assert.match(worker, /const FIREBASE_MODULES = \[/);
@@ -65,10 +97,10 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
-  assert.match(app, /const APP_VERSION = '17'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '17'/);
-  assert.match(html, /styles\.css\?v=17/);
-  assert.match(html, /app\.js\?v=17/);
+  assert.match(app, /const APP_VERSION = '18'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '18'/);
+  assert.match(html, /styles\.css\?v=18/);
+  assert.match(html, /app\.js\?v=18/);
 });
 
 test('update progress reports completed cache operations and gates reload', () => {
@@ -80,11 +112,61 @@ test('update progress reports completed cache operations and gates reload', () =
   assert.match(worker, /progress\?\.stop\(\);\s*await caches\.delete/);
   assert.match(worker, /await caches\.delete\(CACHE_NAME\)/);
   assert.match(worker, /type: 'CACHE_ERROR'/);
-  assert.match(app, /type==='CACHE_PROGRESS'&&!failedUpdateVersions\.has\(version\)/);
-  assert.match(app, /'applyUpdate'\)\.hidden=true/);
-  assert.match(app, /worker\.state==='installed'.*showUpdate\(worker\)/);
+  assert.match(worker, /clients\.matchAll\(\{ type: 'window', includeUncontrolled: true \}\)/);
+  assert.match(worker, /client\.postMessage\(\{ \.\.\.message, version: DEPLOYMENT_VERSION \}\)/);
+  assert.match(worker, /event\.waitUntil\(self\.skipWaiting\(\)\)/);
+  assert.match(worker, /if \(!isFirebaseModule\) return/);
+  assert.match(worker, /do not hold the old worker alive by intercepting Firestore's/);
+  assert.match(pwaUpdate, /payload\.type === 'CACHE_PROGRESS'/);
+  assert.match(pwaUpdate, /waitingWorker\.postMessage\('SKIP_WAITING'\)/);
   assert.match(html, /role="progressbar"/);
   assert.match(styles, /--update-progress/);
+});
+
+test('installing-worker progress appears before ready, including completed and total work', async () => {
+  const harness = updateHarness();
+  await Promise.resolve();
+  const installing = new EventTargetMock();
+  installing.state = 'installing';
+  harness.registration.installing = installing;
+  harness.registration.dispatch('updatefound');
+  assert.equal(harness.elements.updateMessage.textContent, 'Updating app… 0%');
+  harness.serviceWorkers.dispatch('message', { source: installing, data: { type: 'CACHE_PROGRESS', version: '18', completed: 9, total: 20, percent: 45 } });
+  assert.equal(harness.elements.updateMessage.textContent, 'Updating app… 45%');
+  assert.equal(harness.elements.updateProgress.attributes.get('aria-valuetext'), '9 of 20 files cached');
+  assert.equal(harness.elements.applyUpdate.hidden, true);
+  installing.state = 'installed';
+  installing.dispatch('statechange');
+  assert.equal(harness.elements.updateMessage.textContent, 'A new app version is ready.');
+  assert.equal(harness.elements.applyUpdate.hidden, false);
+});
+
+test('Reload gives immediate feedback, asks the waiting worker to activate, and reloads once', async () => {
+  const harness = updateHarness();
+  await Promise.resolve();
+  const messages = [];
+  harness.registration.waiting = { state: 'installed', postMessage: message => messages.push(message) };
+  harness.elements.applyUpdate.click();
+  assert.equal(harness.elements.updateMessage.textContent, 'Installing update…');
+  assert.equal(harness.elements.applyUpdate.hidden, true);
+  assert.equal(harness.elements.applyUpdate.disabled, true);
+  assert.deepEqual(messages, ['SKIP_WAITING']);
+  harness.serviceWorkers.dispatch('controllerchange');
+  harness.serviceWorkers.dispatch('controllerchange');
+  assert.equal(harness.reloads(), 1);
+});
+
+test('a failed install reports failure without activating or discarding the current controller', async () => {
+  const harness = updateHarness();
+  await Promise.resolve();
+  const activeController = harness.serviceWorkers.controller;
+  const installing = new EventTargetMock();
+  harness.registration.installing = installing;
+  harness.registration.dispatch('updatefound');
+  harness.serviceWorkers.dispatch('message', { source: installing, data: { type: 'CACHE_ERROR', version: '18' } });
+  assert.equal(harness.elements.updateMessage.textContent, 'Update failed. Using the current version.');
+  assert.equal(harness.serviceWorkers.controller, activeController);
+  assert.equal(harness.reloads(), 0);
 });
 
 test('About the Event presents J.R. responsively and offline', () => {
