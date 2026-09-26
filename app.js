@@ -64,7 +64,7 @@ import { registerPwaUpdate } from './pwa-update.js';
   }
 
   function nextTeamColor(teams) {
-    const used=new Set(teams.map(team=>team.color).filter(color=>TEAM_COLOR_PALETTE.includes(color)));
+    const used=new Set(teams.map(team=>typeof team.color==='string'?team.color.toLowerCase():'').filter(color=>TEAM_COLOR_PALETTE.includes(color)));
     return TEAM_COLOR_PALETTE.find(color=>!used.has(color)) || '';
   }
 
@@ -87,8 +87,8 @@ import { registerPwaUpdate } from './pwa-update.js';
       if (!Number.isFinite(score) || score < 0) errors.push(`Score for ${name || `team ${index + 1}`} must be zero or greater.`);
       if (iconUrl && !safeIconUrl(iconUrl)) errors.push(`Icon URL for ${name || `team ${index + 1}`} is unsafe.`);
       const requestedColor=typeof team.color==='string'?team.color:'';
-      const color=TEAM_COLOR_PATTERN.test(requestedColor)?requestedColor:nextTeamColor(cleanTeams);
-      if(!color)errors.push(`Team ${index + 1} needs a six-digit hexadecimal color.`);
+      const color=requestedColor;
+      if(!TEAM_COLOR_PATTERN.test(color))errors.push(`Team ${index + 1} needs a six-digit hexadecimal color.`);
       cleanTeams.push({ id, name, iconUrl, score, color });
     });
     const date = new Date(value.updatedAt);
@@ -337,8 +337,8 @@ import { registerPwaUpdate } from './pwa-update.js';
     const colorLabel=document.createElement('label'); colorLabel.textContent='Team Color'; colorLabel.htmlFor=`color-${team.id}`;
     const colorInputs=document.createElement('div'); colorInputs.className='team-color-inputs';
     const colorPicker=document.createElement('input'); colorPicker.type='color'; colorPicker.value=team.color; colorPicker.id=colorLabel.htmlFor; colorPicker.dataset.field='colorPicker'; colorPicker.setAttribute('aria-label',`${team.name} color picker`);
-    const colorHex=document.createElement('input'); colorHex.type='text'; colorHex.value=team.color; colorHex.dataset.field='color'; colorHex.setAttribute('aria-label',`${team.name} hexadecimal color`); colorHex.setAttribute('autocomplete','off'); colorHex.setAttribute('spellcheck','false'); colorHex.maxLength=7; colorHex.placeholder='#5B32D6';
-    const colorError=document.createElement('p'); colorError.className='field-error'; colorError.dataset.error='color';
+    const colorHex=document.createElement('input'); colorHex.type='text'; colorHex.value=team.color; colorHex.dataset.field='color'; colorHex.setAttribute('aria-label',`${team.name} hexadecimal color`); colorHex.setAttribute('aria-describedby',`color-error-${team.id}`); colorHex.setAttribute('autocomplete','off'); colorHex.setAttribute('spellcheck','false'); colorHex.pattern='^#[0-9a-fA-F]{6}$'; colorHex.maxLength=7; colorHex.placeholder='#5B32D6';
+    const colorError=document.createElement('p'); colorError.className='field-error'; colorError.dataset.error='color'; colorError.id=`color-error-${team.id}`;
     colorPicker.addEventListener('input',()=>{colorHex.value=colorPicker.value});
     colorHex.addEventListener('input',()=>{if(TEAM_COLOR_PATTERN.test(colorHex.value))colorPicker.value=colorHex.value});
     colorInputs.append(colorPicker,colorHex); colorField.append(colorLabel,colorInputs,colorError);

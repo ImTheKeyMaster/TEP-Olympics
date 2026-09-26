@@ -270,6 +270,7 @@ test('Admin renders and persists synchronized team color controls', () => {
   assert.match(app, /colorLabel\.textContent='Team Color'/);
   assert.match(app, /colorPicker\.type='color'; colorPicker\.value=team\.color/);
   assert.match(app, /colorHex\.type='text'; colorHex\.value=team\.color/);
+  assert.match(app, /colorHex\.pattern='\^#\[0-9a-fA-F\]\{6\}\$'/);
   assert.match(app, /colorPicker\.addEventListener\('input',\(\)=>\{colorHex\.value=colorPicker\.value\}\)/);
   assert.match(app, /colorHex\.addEventListener\('input',\(\)=>\{if\(TEAM_COLOR_PATTERN\.test\(colorHex\.value\)\)colorPicker\.value=colorHex\.value\}\)/);
   assert.match(app, /card\.append\(grid,iconField,colorField,actions\)/);
