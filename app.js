@@ -5,7 +5,7 @@ import { registerPwaUpdate } from './pwa-update.js';
 
 (() => {
   'use strict';
-  const APP_VERSION = '19';
+  const APP_VERSION = '20';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
@@ -402,13 +402,28 @@ import { registerPwaUpdate } from './pwa-update.js';
     if(!data.teams.length)try{data=await loadPublished();renderLeaderboard()}catch(loadError){console.warn('Fallback data failed:',loadError)}
   }
 
-  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','objectives','admin','about'].includes(name))name='leaderboard'; cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
+  function route() { let name=location.hash.slice(1)||'leaderboard'; if(!['leaderboard','objectives','admin','about'].includes(name))name='leaderboard'; if($('objectivesViewer').open)$('objectivesViewer').close(); cancelReveal(); document.querySelectorAll('.screen').forEach(s=>s.hidden=true); if(name==='admin'){if(currentUser){$('adminScreen').hidden=false;renderAdmin(true)}else{$('loginScreen').hidden=false;setTimeout(()=>$('email').focus(),0)}}else $(name+'Screen').hidden=false; closeMenu(); window.scrollTo(0,0); }
   function openMenu(){ $('drawer').classList.add('open');$('drawer').setAttribute('aria-hidden','false');$('menuButton').setAttribute('aria-expanded','true');$('scrim').hidden=false;$('closeMenu').focus() }
   function closeMenu(){ $('drawer').classList.remove('open');$('drawer').setAttribute('aria-hidden','true');$('menuButton').setAttribute('aria-expanded','false');$('scrim').hidden=true }
   function confirmAction(title,message){return new Promise(resolve=>{const dialog=$('confirmDialog');$('dialogTitle').textContent=title;$('dialogMessage').textContent=message;dialog.showModal();dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true})})}
 
+  function setupObjectivesViewer(){
+    const viewer=$('objectivesViewer'),canvas=$('objectivesViewerCanvas'),image=$('objectivesViewerImage');
+    let zoom=1;
+    const fitSize=()=>{const ratio=image.naturalWidth/image.naturalHeight||1427/1102,style=getComputedStyle(canvas);const availableWidth=canvas.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),availableHeight=canvas.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom);return Math.max(1,Math.min(availableWidth,availableHeight*ratio))};
+    const applyZoom=(next,keepCenter=false)=>{const oldWidth=image.getBoundingClientRect().width,centerX=canvas.scrollLeft+canvas.clientWidth/2,centerY=canvas.scrollTop+canvas.clientHeight/2;zoom=Math.max(1,Math.min(4,next));image.style.width=`${fitSize()*zoom}px`;$('objectivesZoomOut').disabled=zoom===1;$('objectivesZoomIn').disabled=zoom===4;$('objectivesZoomReset').textContent=zoom===1?'Fit':`${Math.round(zoom*100)}%`;if(keepCenter&&oldWidth){const factor=image.getBoundingClientRect().width/oldWidth;canvas.scrollLeft=centerX*factor-canvas.clientWidth/2;canvas.scrollTop=centerY*factor-canvas.clientHeight/2}}
+    const open=()=>{viewer.showModal();zoom=1;requestAnimationFrame(()=>applyZoom(1));};
+    const close=()=>viewer.close();
+    $('openObjectivesViewer').onclick=open;$('objectivesImageButton').onclick=open;$('closeObjectivesViewer').onclick=close;
+    $('objectivesZoomIn').onclick=()=>applyZoom(zoom+.5,true);$('objectivesZoomOut').onclick=()=>applyZoom(zoom-.5,true);$('objectivesZoomReset').onclick=()=>{applyZoom(1);canvas.scrollTo(0,0)};
+    viewer.addEventListener('click',event=>{if(event.target===viewer)close()});
+    viewer.addEventListener('close',()=>{image.style.width='';zoom=1});
+    addEventListener('resize',()=>{if(viewer.open)applyZoom(zoom,true)});
+    image.addEventListener('load',()=>{if(viewer.open)applyZoom(zoom)});
+  }
+
   function bindEvents(){
-    addEventListener('hashchange',route);$('menuButton').onclick=openMenu;$('closeMenu').onclick=closeMenu;$('scrim').onclick=closeMenu;addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('revealButton').onclick=handleRevealButton;
+    addEventListener('hashchange',route);$('menuButton').onclick=openMenu;$('closeMenu').onclick=closeMenu;$('scrim').onclick=closeMenu;addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('revealButton').onclick=handleRevealButton;setupObjectivesViewer();
     $('togglePassword').onclick=()=>{const p=$('password'),show=p.type==='password';p.type=show?'text':'password';$('togglePassword').textContent=show?'Hide':'Show';$('togglePassword').setAttribute('aria-label',show?'Hide password':'Show password')};
     $('loginForm').onsubmit=async e=>{e.preventDefault();const button=e.currentTarget.querySelector('[type=submit]');button.disabled=true;$('loginError').textContent='';try{await signInWithEmailAndPassword(auth,$('email').value.trim(),$('password').value);$('password').value='';announce('Signed in.')}catch(error){$('loginError').textContent=friendlyFirebaseError(error,'sign in');$('password').select()}finally{button.disabled=false}};
     $('logoutButton').onclick=async()=>{try{await signOut(auth);location.hash='leaderboard';announce('Logged out.')}catch(error){announce(friendlyFirebaseError(error,'log out'),true)}};

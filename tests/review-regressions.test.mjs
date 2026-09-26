@@ -12,6 +12,7 @@ const { registerPwaUpdate } = await import(`data:text/javascript;base64,${Buffer
 class EventTargetMock {
   listeners = new Map();
   addEventListener(type, listener) { this.listeners.set(type, [...(this.listeners.get(type) || []), listener]); }
+  removeEventListener(type, listener) { this.listeners.set(type, (this.listeners.get(type) || []).filter(item => item !== listener)); }
   dispatch(type, event = {}) { for (const listener of this.listeners.get(type) || []) listener(event); }
 }
 
@@ -85,22 +86,30 @@ test('completed migration controls and code are removed while fallback loading r
 test('Objectives is a responsive routed view available offline', () => {
   assert.match(html, /id="objectivesScreen"/);
   assert.match(html, /class="objectives-button" href="#objectives">Objectives<\/a><button id="revealButton"/);
+  assert.match(html, /id="openObjectivesViewer"[^>]*aria-label="View objectives fullscreen"/);
   assert.match(html, /class="objectives-close" href="#leaderboard" aria-label="Return to leaderboard">×<\/a>/);
-  assert.match(html, /href="images\/Objectives\.png"[^>]*target="_blank"/);
+  assert.match(html, /id="objectivesViewer" class="objectives-viewer"/);
+  assert.match(html, /id="closeObjectivesViewer"[^>]*aria-label="Close fullscreen objectives viewer"/);
+  assert.doesNotMatch(html, /href="images\/Objectives\.png"[^>]*target="_blank"/);
   assert.match(html, /alt="TEP Scavenger Hunt Objectives"/);
   assert.match(app, /'leaderboard','objectives','admin','about'/);
   assert.match(worker, /'\.\/images\/Objectives\.png'/);
   assert.match(styles, /\.objectives-image\{[^}]*width:100%[^}]*max-width:1427px[^}]*height:auto[^}]*object-fit:contain/);
   assert.match(styles, /@media\(max-width:650px\).*\.objectives-hint\{display:block/);
   assert.match(styles, /\.objectives-button\{[^}]*min-height:48px/);
-  assert.match(styles, /\.objectives-close\{[^}]*width:48px[^}]*height:48px/);
+  assert.match(styles, /\.objectives-control,\.objectives-close\{[^}]*width:48px[^}]*height:48px/);
+  assert.match(styles, /\.objectives-viewer\{[^}]*100dvw[^}]*100dvh/);
+  assert.match(styles, /touch-action:pan-x pan-y pinch-zoom/);
+  assert.match(styles, /\.objectives-viewer-image-wrap\{[^}]*width:max-content[^}]*height:max-content[^}]*min-width:100%[^}]*min-height:100%/);
+  assert.match(app, /addEventListener\('resize',\(\)=>\{if\(viewer\.open\)applyZoom/);
+  assert.match(app, /if\(\$\('objectivesViewer'\)\.open\)\$\('objectivesViewer'\)\.close\(\)/);
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
-  assert.match(app, /const APP_VERSION = '19'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '19'/);
-  assert.match(html, /styles\.css\?v=19/);
-  assert.match(html, /app\.js\?v=19/);
+  assert.match(app, /const APP_VERSION = '20'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '20'/);
+  assert.match(html, /styles\.css\?v=20/);
+  assert.match(html, /app\.js\?v=20/);
 });
 
 test('update progress reports completed cache operations and gates reload', () => {
@@ -151,9 +160,45 @@ test('Reload gives immediate feedback, asks the waiting worker to activate, and 
   assert.equal(harness.elements.applyUpdate.hidden, true);
   assert.equal(harness.elements.applyUpdate.disabled, true);
   assert.deepEqual(messages, ['SKIP_WAITING']);
+  harness.serviceWorkers.controller = harness.registration.waiting;
   harness.serviceWorkers.dispatch('controllerchange');
   harness.serviceWorkers.dispatch('controllerchange');
   assert.equal(harness.reloads(), 1);
+});
+
+test('Chrome tab only reloads after the selected update controls it', async () => {
+  const harness = updateHarness();
+  await Promise.resolve();
+  const waiting = new EventTargetMock();
+  waiting.state = 'installed';
+  waiting.postMessage = () => {};
+  harness.registration.waiting = waiting;
+  harness.elements.applyUpdate.click();
+  harness.serviceWorkers.dispatch('controllerchange');
+  assert.equal(harness.reloads(), 0);
+  harness.serviceWorkers.controller = waiting;
+  waiting.state = 'activated';
+  waiting.dispatch('statechange');
+  assert.equal(harness.elements.updateNotice.hidden, true);
+  assert.equal(harness.reloads(), 1);
+  waiting.state = 'redundant';
+  waiting.dispatch('statechange');
+  assert.equal(harness.elements.updateNotice.hidden, true);
+});
+
+test('a waiting worker that becomes redundant exits the installing state', async () => {
+  const harness = updateHarness();
+  await Promise.resolve();
+  const waiting = new EventTargetMock();
+  waiting.state = 'installed';
+  waiting.postMessage = () => {};
+  harness.registration.waiting = waiting;
+  harness.elements.applyUpdate.click();
+  waiting.state = 'redundant';
+  waiting.dispatch('statechange');
+  assert.equal(harness.elements.updateMessage.textContent, 'Update installation failed. Using the current version.');
+  assert.equal(harness.elements.updateProgress.hidden, true);
+  assert.equal(harness.reloads(), 0);
 });
 
 test('Reload reports when registration.waiting is unexpectedly unavailable', async () => {
