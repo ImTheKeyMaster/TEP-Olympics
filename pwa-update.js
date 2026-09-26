@@ -82,14 +82,16 @@ export function registerPwaUpdate({
   });
 
   serviceWorkers.addEventListener('controllerchange', () => {
-    if (!applying || reloadRequested) return;
+    // Another open tab can activate this same update. Reload any page that was
+    // already controlled when it began, while retaining the one-reload guard.
+    if (!hadController || reloadRequested) return;
     reloadRequested = true;
     reloadPage();
   });
 
   applyButton.addEventListener('click', () => {
     if (applying) return;
-    const waitingWorker = registration?.waiting || (updateWorker?.state === 'installed' ? updateWorker : null);
+    const waitingWorker = registration?.waiting;
     if (!waitingWorker) {
       showFailure('The update is no longer ready. Checking again…');
       registration?.update().catch(error => console.warn('Service worker update check failed:', error));

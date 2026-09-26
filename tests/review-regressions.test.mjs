@@ -115,8 +115,8 @@ test('update progress reports completed cache operations and gates reload', () =
   assert.match(worker, /clients\.matchAll\(\{ type: 'window', includeUncontrolled: true \}\)/);
   assert.match(worker, /client\.postMessage\(\{ \.\.\.message, version: DEPLOYMENT_VERSION \}\)/);
   assert.match(worker, /event\.waitUntil\(self\.skipWaiting\(\)\)/);
-  assert.match(worker, /if \(!isFirebaseModule\) return/);
-  assert.match(worker, /do not hold the old worker alive by intercepting Firestore's/);
+  assert.match(worker, /if \(url\.hostname === 'firestore\.googleapis\.com'\) return/);
+  assert.match(worker, /continue runtime caching other external assets such as custom team icons/);
   assert.match(pwaUpdate, /payload\.type === 'CACHE_PROGRESS'/);
   assert.match(pwaUpdate, /waitingWorker\.postMessage\('SKIP_WAITING'\)/);
   assert.match(html, /role="progressbar"/);
@@ -154,6 +154,15 @@ test('Reload gives immediate feedback, asks the waiting worker to activate, and 
   harness.serviceWorkers.dispatch('controllerchange');
   harness.serviceWorkers.dispatch('controllerchange');
   assert.equal(harness.reloads(), 1);
+});
+
+test('Reload reports when registration.waiting is unexpectedly unavailable', async () => {
+  const harness = updateHarness();
+  await Promise.resolve();
+  harness.elements.applyUpdate.click();
+  assert.equal(harness.elements.updateMessage.textContent, 'The update is no longer ready. Checking again…');
+  assert.equal(harness.elements.applyUpdate.hidden, true);
+  assert.equal(harness.reloads(), 0);
 });
 
 test('a failed install reports failure without activating or discarding the current controller', async () => {

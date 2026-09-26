@@ -95,13 +95,10 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== location.origin) {
-    // Only the Firebase SDK module graph belongs in the app-shell cache. In
-    // particular, do not hold the old worker alive by intercepting Firestore's
-    // long-lived realtime requests while a replacement worker is activating.
-    const isFirebaseModule = url.hostname === 'www.gstatic.com'
-      && url.pathname.startsWith('/firebasejs/11.10.0/')
-      && url.pathname.endsWith('.js');
-    if (!isFirebaseModule) return;
+    // Firestore's streaming requests can remain open for minutes. Let them go
+    // directly to the network so they cannot keep a retiring worker alive;
+    // continue runtime caching other external assets such as custom team icons.
+    if (url.hostname === 'firestore.googleapis.com') return;
     event.respondWith(fetch(event.request).then(response => {
       const copy=response.clone(); caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy)); return response;
     }).catch(() => caches.match(event.request)));
