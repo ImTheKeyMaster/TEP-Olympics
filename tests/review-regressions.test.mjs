@@ -107,10 +107,10 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
-  assert.match(app, /const APP_VERSION = '25'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '25'/);
-  assert.match(html, /styles\.css\?v=25/);
-  assert.match(html, /app\.js\?v=25/);
+  assert.match(app, /const APP_VERSION = '26'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '26'/);
+  assert.match(html, /styles\.css\?v=26/);
+  assert.match(html, /app\.js\?v=26/);
 });
 
 test('Team Rosters is routed, sorted in the app, themed from live teams, and available offline', () => {

@@ -5,7 +5,7 @@ import { registerPwaUpdate } from './pwa-update.js';
 
 (() => {
   'use strict';
-  const APP_VERSION = '25';
+  const APP_VERSION = '26';
   const firebaseConfig = {
     apiKey: 'AIzaSyBae3zbFxXrNXIj5WSHA_aECq0y7T7M0v0',
     authDomain: 'tep-olympics.firebaseapp.com',
