@@ -107,10 +107,10 @@ test('Objectives is a responsive routed view available offline', () => {
   assert.match(styles, /\.leaderboard-heading\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:540px\).*\.leaderboard-actions #teamCount\{[^}]*grid-column:1\/-1/);
-  assert.match(app, /const APP_VERSION = '26'/);
-  assert.match(worker, /const DEPLOYMENT_VERSION = '26'/);
-  assert.match(html, /styles\.css\?v=26/);
-  assert.match(html, /app\.js\?v=26/);
+  assert.match(app, /const APP_VERSION = '27'/);
+  assert.match(worker, /const DEPLOYMENT_VERSION = '27'/);
+  assert.match(html, /styles\.css\?v=27/);
+  assert.match(html, /app\.js\?v=27/);
 });
 
 test('Team Rosters is routed, sorted in the app, themed from live teams, and available offline', () => {
@@ -133,12 +133,20 @@ test('Team Rosters is routed, sorted in the app, themed from live teams, and ava
   assert.match(worker, /'\.\/data\/rosters\.json'/);
   assert.deepEqual([...rosters.teams].sort((a,b)=>a.name.localeCompare(b.name)).map(team=>team.name), ['Emeralds','Lamps','Pearls','Plumes','Swords']);
   assert.deepEqual(rosters.teams.map(team=>team.teamId).sort(), ['placeholder-emeralds','placeholder-lamps','placeholder-pearls','placeholder-plumes','placeholder-swords']);
+  assert.deepEqual(Object.fromEntries(rosters.teams.map(team=>[team.name,team.members.length])), {
+    Emeralds: 8,
+    Pearls: 8,
+    Plumes: 8,
+    Swords: 9,
+    Lamps: 8
+  });
+  assert.equal(rosters.teams.flatMap(team=>team.members).length, 41);
   const expectedLastNames = {
-    Emeralds: ['Aller','Aukamp','Brown','Gordon','Klugman','Koff','Mitchell','Rogers','Warren'],
-    Lamps: ['Averbukh','Barron','Difalco','Gaglione','Herman','Jordan','Kaiser','Moretti'],
-    Pearls: ['Amaral','Butler','Fischer','Hacker','Hawthorn','Hildebrant','Rappaport','Sponzo','Yenuganti'],
-    Plumes: ['Baez','Buckley','Figueroa','Gresser','Loiselle','McNally','McVeigh','Schonfeld','Ten-Ami'],
-    Swords: ['Arbesfeld','Demasi','Hoyos','Hurley','Kirshbaum','LaRusso',"O'Neill",'Siden','Spolansky']
+    Emeralds: ['Aller','Aukamp','Brown','Gordon','Koff','Mitchell','Rogers','Warren'],
+    Lamps: ['Averbukh','Barron','Difalco','Gaglione','Herman','Kaiser','McNally','Moretti'],
+    Pearls: ['Amaral','Butler','Hacker','Hawthorn','Hildebrant','Rappaport','Sponzo','Yenuganti'],
+    Plumes: ['Baez','Buckley','Foley','Jordan','Loiselle','McVeigh','Schonfeld','Ten-Ami'],
+    Swords: ['Demasi','Hoyos','Hurley','Kirshbaum','LaRusso',"O'Neill",'Prymaczek','Siden','Spolansky']
   };
   for (const team of rosters.teams) {
     const sortedMembers=[...team.members].sort((a,b)=>a.lastName.localeCompare(b.lastName)||a.firstName.localeCompare(b.firstName));
@@ -146,6 +154,14 @@ test('Team Rosters is routed, sorted in the app, themed from live teams, and ava
   }
   assert.deepEqual(rosters.teams.flatMap(team=>team.members).find(member=>member.lastName==="O'Neill"), { firstName:'Brandon', lastName:"O'Neill", chapter:'Rho' });
   assert.deepEqual(rosters.teams.flatMap(team=>team.members).find(member=>member.lastName==='Ten-Ami'), { firstName:'Ethan', lastName:'Ten-Ami', chapter:'Gamma Tau' });
+  const findMember = name => rosters.teams.flatMap(team=>team.members.map(member=>({ team:team.name, ...member }))).find(member=>`${member.firstName} ${member.lastName}`===name);
+  assert.deepEqual(findMember('Teague Foley'), { team:'Plumes', firstName:'Teague', lastName:'Foley', chapter:'Phi Upsilon' });
+  assert.deepEqual(findMember('Sean Prymaczek'), { team:'Swords', firstName:'Sean', lastName:'Prymaczek', chapter:'Phi Upsilon' });
+  assert.deepEqual(findMember('Kevin Jordan'), { team:'Plumes', firstName:'Kevin', lastName:'Jordan', chapter:'Alpha Sigma' });
+  assert.deepEqual(findMember('Jackson McNally'), { team:'Lamps', firstName:'Jackson', lastName:'McNally', chapter:'Tau Omega' });
+  for (const removed of ['Noah Klugman','Logan Fischer','Matthew Gresser','Charlie Figueroa','Ethan Arbesfeld']) assert.equal(findMember(removed), undefined);
+  const participantNames = rosters.teams.flatMap(team=>team.members.map(member=>`${member.firstName} ${member.lastName}`));
+  assert.equal(new Set(participantNames).size, 41);
   assert.match(app, /Last Name<\/th><th scope="col">First Name<\/th><th scope="col">Chapter/);
   assert.doesNotMatch(JSON.stringify(rosters), /email|gmail|score/i);
 });
